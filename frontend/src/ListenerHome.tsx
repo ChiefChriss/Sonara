@@ -190,13 +190,12 @@ const ListenerHome = () => {
 
   /** Tony's gradient card design + Chris's play/data wiring */
   const TrackCard = ({ item, index }: { item: Track; index: number }) => {
-    const cover = item.cover_image || item.profile_picture;
     const playing = isPlaying(item);
     return (
       <div style={styles.trackCard}>
         <div className="card-img-wrap" style={{ ...styles.cardImageWrap, cursor: 'pointer' }} onClick={() => navigate(`/${item.type}/${item.id}`)}>
-          {cover ? (
-            <img src={cover} alt="" style={styles.cardImage} />
+          {item.cover_image ? (
+            <img src={item.cover_image} alt="" style={styles.cardImage} />
           ) : (
             <div style={{ ...styles.cardGradient, background: getGradient(index) }} />
           )}
@@ -207,6 +206,14 @@ const ListenerHome = () => {
           >
             {playing ? '⏸' : '▶'}
           </button>
+          {item.profile_picture && (
+            <img
+              src={item.profile_picture}
+              alt=""
+              style={styles.cardAvatarBadge}
+              onClick={(e) => { e.stopPropagation(); navigate(`/@${item.username}`); }}
+            />
+          )}
         </div>
         <div style={styles.cardTextWrap} onClick={() => navigate(`/${item.type}/${item.id}`)}>
           <p style={styles.cardTitle}>{item.title}</p>
@@ -224,13 +231,12 @@ const ListenerHome = () => {
 
   /** Chris's TrackRow for the All Tracks feed */
   const TrackRow = ({ item }: { item: Track }) => {
-    const cover = item.cover_image || item.profile_picture;
     const playing = isPlaying(item);
     return (
       <div style={styles.row} className="track-row">
-        <div style={styles.rowThumb}>
-          {cover ? (
-            <img src={cover} alt="" style={styles.rowThumbImg} />
+        <div style={{ ...styles.rowThumb, position: 'relative' }}>
+          {item.cover_image ? (
+            <img src={item.cover_image} alt="" style={styles.rowThumbImg} />
           ) : (
             <div style={styles.rowThumbPh}>🎵</div>
           )}
@@ -240,6 +246,14 @@ const ListenerHome = () => {
           >
             {playing ? '⏸' : '▶'}
           </button>
+          {item.profile_picture && (
+            <img
+              src={item.profile_picture}
+              alt=""
+              style={styles.rowAvatarBadge}
+              onClick={(e) => { e.stopPropagation(); navigate(`/@${item.username}`); }}
+            />
+          )}
         </div>
         <div style={styles.rowInfo} onClick={() => navigate(`/${item.type}/${item.id}`)}>
           <span style={styles.rowTitle}>{item.title}</span>
@@ -395,11 +409,19 @@ const ListenerHome = () => {
           <section style={styles.featuredSection}>
             <h2 style={styles.sectionTitle}>Featured Track</h2>
             <div style={styles.featuredCard}>
-              <div style={{ ...styles.featuredLeft, cursor: 'pointer' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>
-                {(trending[0].cover_image || trending[0].profile_picture) ? (
-                  <img src={(trending[0].cover_image || trending[0].profile_picture)!} alt="" style={styles.featuredImage} />
+              <div style={{ ...styles.featuredLeft, cursor: 'pointer', position: 'relative' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>
+                {trending[0].cover_image ? (
+                  <img src={trending[0].cover_image} alt="" style={styles.featuredImage} />
                 ) : (
                   <div style={{ ...styles.featuredImagePh, background: getGradient(trending[0].id) }} />
+                )}
+                {trending[0].profile_picture && (
+                  <img
+                    src={trending[0].profile_picture}
+                    alt=""
+                    style={styles.featuredAvatarBadge}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/@${trending[0].username}`); }}
+                  />
                 )}
               </div>
               <div style={styles.featuredRight}>
@@ -1078,6 +1100,44 @@ const styles: Record<string, React.CSSProperties> = {
     width: 56,
     textAlign: 'right',
   },
+
+  // Avatar badges (profile picture circle on track images)
+  cardAvatarBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '2px solid #13131f',
+    cursor: 'pointer',
+    zIndex: 2,
+  } as React.CSSProperties,
+  featuredAvatarBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '2px solid #13131f',
+    cursor: 'pointer',
+    zIndex: 2,
+  } as React.CSSProperties,
+  rowAvatarBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '2px solid #13131f',
+    cursor: 'pointer',
+    zIndex: 2,
+  } as React.CSSProperties,
 };
 
 export default ListenerHome;
