@@ -396,15 +396,15 @@ const ListenerHome = () => {
             <h2 style={styles.sectionTitle}>Featured Track</h2>
             <div style={styles.featuredCard}>
               <div style={styles.featuredLeft}>
-                {trending[0].cover_image ? (
-                  <img src={trending[0].cover_image} alt="" style={styles.featuredImage} />
+                {(trending[0].cover_image || trending[0].profile_picture) ? (
+                  <img src={(trending[0].cover_image || trending[0].profile_picture)!} alt="" style={styles.featuredImage} />
                 ) : (
                   <div style={{ ...styles.featuredImagePh, background: getGradient(trending[0].id) }} />
                 )}
               </div>
               <div style={styles.featuredRight}>
                 <p style={styles.featuredLabel}>NOW PLAYING</p>
-                <h3 style={styles.featuredTitle}>{trending[0].title}</h3>
+                <h3 style={{ ...styles.featuredTitle, cursor: 'pointer' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>{trending[0].title}</h3>
                 <p
                   style={styles.featuredArtist}
                   onClick={() => navigate(`/@${trending[0].username}`)}
