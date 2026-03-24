@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
+from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
 
 def validate_image_size(file):
@@ -68,6 +69,7 @@ class Track(models.Model):
     title = models.CharField(max_length=255)
     audio_file = models.FileField(
         upload_to='tracks/',
+        storage=RawMediaCloudinaryStorage(),
         validators=[validate_audio_size],
     )
     cover_image = models.ImageField(
@@ -124,6 +126,7 @@ class Publication(models.Model):
     description = models.TextField(blank=True, default='')
     audio_file = models.FileField(
         upload_to='publications/',
+        storage=RawMediaCloudinaryStorage(),
         validators=[validate_audio_size],
     )
     cover_image = models.ImageField(
