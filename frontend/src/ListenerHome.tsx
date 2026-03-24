@@ -194,7 +194,7 @@ const ListenerHome = () => {
     const playing = isPlaying(item);
     return (
       <div style={styles.trackCard}>
-        <div className="card-img-wrap" style={styles.cardImageWrap}>
+        <div className="card-img-wrap" style={{ ...styles.cardImageWrap, cursor: 'pointer' }} onClick={() => navigate(`/${item.type}/${item.id}`)}>
           {cover ? (
             <img src={cover} alt="" style={styles.cardImage} />
           ) : (
@@ -203,7 +203,7 @@ const ListenerHome = () => {
           <button
             className="card-play-btn"
             style={{ ...styles.cardPlayBtn, opacity: playing ? 1 : undefined }}
-            onClick={() => playing ? globalPlayerState.togglePlayPause() : playTrack(item)}
+            onClick={(e) => { e.stopPropagation(); playing ? globalPlayerState.togglePlayPause() : playTrack(item); }}
           >
             {playing ? '⏸' : '▶'}
           </button>
@@ -395,7 +395,7 @@ const ListenerHome = () => {
           <section style={styles.featuredSection}>
             <h2 style={styles.sectionTitle}>Featured Track</h2>
             <div style={styles.featuredCard}>
-              <div style={styles.featuredLeft}>
+              <div style={{ ...styles.featuredLeft, cursor: 'pointer' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>
                 {(trending[0].cover_image || trending[0].profile_picture) ? (
                   <img src={(trending[0].cover_image || trending[0].profile_picture)!} alt="" style={styles.featuredImage} />
                 ) : (
