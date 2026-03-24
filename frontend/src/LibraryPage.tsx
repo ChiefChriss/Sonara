@@ -145,9 +145,9 @@ const LibraryPage = () => {
                     <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                         <span style={styles.sidebarIcon}>&#127925;</span> Create Music
                     </Link>
-                    <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
+                    <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
                         <span style={styles.sidebarIcon}>&#128722;</span> Marketplace
-                    </Link>
+                    </div>
                     <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
                         <span style={styles.sidebarIcon}>&#128100;</span> Profile
                     </Link>

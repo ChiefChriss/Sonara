@@ -160,9 +160,9 @@ const ExplorePage = () => {
         <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
           <span style={styles.sidebarIcon as React.CSSProperties}>&#127925;</span> Create Music
         </Link>
-        <Link to="/explore" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+        <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
           <span style={styles.sidebarIcon as React.CSSProperties}>&#128722;</span> Marketplace
-        </Link>
+        </div>
         <Link to={profileLink} className="sidebar-link" style={styles.sidebarLink}>
           <span style={styles.sidebarIcon as React.CSSProperties}>&#128100;</span> Profile
         </Link>

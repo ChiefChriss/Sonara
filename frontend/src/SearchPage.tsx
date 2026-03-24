@@ -153,9 +153,9 @@ const SearchPage = () => {
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🎵</span> Create Music
           </Link>
-          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
+          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
             <span style={styles.sidebarIcon}>🛒</span> Marketplace
-          </Link>
+          </div>
           <Link
             to={currentUsername ? `/@${currentUsername}` : '/profile'}
             className="sidebar-link"
