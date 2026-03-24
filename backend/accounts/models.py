@@ -188,6 +188,28 @@ class TrackLike(models.Model):
         return f"{self.user.username} ♡ {self.track.title}"
 
 
+class Follow(models.Model):
+    """A user following another user."""
+    follower = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='following_set',
+    )
+    following = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='followers_set',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'following')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.follower.username} → {self.following.username}"
+
+
 # ============ Cleanup signals - delete files from Cloudinary ============
 
 @receiver(pre_delete, sender=User)

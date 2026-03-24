@@ -10,6 +10,7 @@ from .views import (
     ToggleLikeView, LibraryView,
     TrackPlayView, ToggleTrackLikeView,
     TrendingTracksView, NewReleasesView,
+    ToggleFollowView, FollowersListView, FollowingListView,
 )
 
 urlpatterns = [
@@ -43,6 +44,9 @@ urlpatterns = [
     path('feed/', PublicFeedView.as_view(), name='public-feed'),
     path('publications/<int:pk>/detail/', PublicationDetailView.as_view(), name='public-publication-detail'),
     path('users/<str:username>/', PublicUserProfileView.as_view(), name='public-user-profile'),
+    path('users/<str:username>/follow/', ToggleFollowView.as_view(), name='toggle-follow'),
+    path('users/<str:username>/followers/', FollowersListView.as_view(), name='followers-list'),
+    path('users/<str:username>/following/', FollowingListView.as_view(), name='following-list'),
     path('users/<str:username>/publications/', UserPublicationsView.as_view(), name='user-publications'),
     path('search/', SearchView.as_view(), name='search'),
     path('trending/', TrendingTracksView.as_view(), name='trending'),

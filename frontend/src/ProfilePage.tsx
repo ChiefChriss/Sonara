@@ -16,6 +16,18 @@ interface UserProfile {
   header_image: string | null;
   profile_picture: string | null;
   bio: string;
+  follower_count?: number;
+  following_count?: number;
+  is_following?: boolean;
+}
+
+interface FollowUser {
+  id: number;
+  username: string;
+  display_name: string;
+  profile_picture: string | null;
+  bio: string;
+  role: string;
 }
 
 interface Track {
@@ -54,6 +66,13 @@ const ProfilePage = () => {
   const [editInitialTitle, setEditInitialTitle] = useState('');
   const [editInitialCover, setEditInitialCover] = useState<string | null>(null);
   const [deletingTrackId, setDeletingTrackId] = useState<number | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followListModal, setFollowListModal] = useState<'followers' | 'following' | null>(null);
+  const [followList, setFollowList] = useState<FollowUser[]>([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
 
@@ -127,6 +146,37 @@ const ProfilePage = () => {
       /* optionally show error */
     } finally {
       setDeletingTrackId(null);
+    }
+  };
+
+  const toggleFollow = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken || !urlUsername) return;
+    setFollowLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/follow/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsFollowing(data.following);
+        setFollowerCount(data.follower_count);
+      }
+    } catch { /* silent */ } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const openFollowList = async (type: 'followers' | 'following') => {
+    if (!urlUsername) return;
+    setFollowListModal(type);
+    setFollowListLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/${type}/`);
+      if (res.ok) setFollowList(await res.json());
+    } catch { /* silent */ } finally {
+      setFollowListLoading(false);
     }
   };
 
@@ -221,11 +271,19 @@ const ProfilePage = () => {
       if (loggedInUsername && loggedInUsername === urlUsername) {
         setIsOwnProfile(true);
         try {
-          const res = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (!res.ok) throw new Error('Failed to fetch profile');
-          setUser(await res.json());
+          const [profileRes, publicRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/api/auth/profile/`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }),
+            fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/`),
+          ]);
+          if (!profileRes.ok) throw new Error('Failed to fetch profile');
+          setUser(await profileRes.json());
+          if (publicRes.ok) {
+            const pubData = await publicRes.json();
+            setFollowerCount(pubData.follower_count ?? 0);
+            setFollowingCount(pubData.following_count ?? 0);
+          }
         } catch (err: unknown) {
           setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
@@ -259,6 +317,9 @@ const ProfilePage = () => {
             display_name: data.display_name || '',
           });
           setTracks(publicTracks);
+          setFollowerCount(data.follower_count ?? 0);
+          setFollowingCount(data.following_count ?? 0);
+          setIsFollowing(data.is_following ?? false);
         } catch (err: unknown) {
           setError(err instanceof Error ? err.message : 'Something went wrong');
         } finally {
@@ -644,6 +705,28 @@ const ProfilePage = () => {
             <p style={styles.handle}>@{user?.username}</p>
           </div>
 
+          {/* Follower / Following counts */}
+          <div style={styles.followStats}>
+            <button type="button" onClick={() => openFollowList('followers')} style={styles.followStatBtn}>
+              <strong>{followerCount}</strong> Followers
+            </button>
+            <button type="button" onClick={() => openFollowList('following')} style={styles.followStatBtn}>
+              <strong>{followingCount}</strong> Following
+            </button>
+          </div>
+
+          {/* Follow button (only on other people's profiles) */}
+          {!isOwnProfile && !loading && user && (
+            <button
+              type="button"
+              onClick={toggleFollow}
+              disabled={followLoading}
+              style={isFollowing ? styles.unfollowBtn : styles.followBtn}
+            >
+              {followLoading ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
+            </button>
+          )}
+
           <div style={styles.rolePill}>{roleLabel}</div>
 
           {user?.bio?.trim() ? (
@@ -807,6 +890,48 @@ const ProfilePage = () => {
             setCropTarget(null);
           }}
         />
+      )}
+
+      {/* Follow list modal */}
+      {followListModal && (
+        <div style={styles.modalOverlay} onClick={() => setFollowListModal(null)}>
+          <div style={styles.followModal} onClick={e => e.stopPropagation()}>
+            <div style={styles.followModalHeader}>
+              <h3 style={styles.followModalTitle}>
+                {followListModal === 'followers' ? 'Followers' : 'Following'}
+              </h3>
+              <button type="button" onClick={() => setFollowListModal(null)} style={styles.followModalClose}>✕</button>
+            </div>
+            <div style={styles.followModalBody}>
+              {followListLoading ? (
+                <p style={{ textAlign: 'center', padding: '24px', opacity: 0.6 }}>Loading...</p>
+              ) : followList.length === 0 ? (
+                <p style={{ textAlign: 'center', padding: '24px', opacity: 0.5 }}>
+                  {followListModal === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
+                </p>
+              ) : (
+                followList.map(u => (
+                  <div
+                    key={u.id}
+                    style={styles.followUserRow}
+                    onClick={() => { setFollowListModal(null); navigate(`/@${u.username}`); }}
+                  >
+                    {u.profile_picture
+                      ? <img src={u.profile_picture} alt="" style={styles.followUserAvatar} />
+                      : <div style={styles.followUserAvatarPh}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                    }
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={styles.followUserName}>{u.display_name || u.username}</div>
+                      <div style={styles.followUserHandle}>@{u.username}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Track edit/upload modal */}
@@ -1582,6 +1707,131 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     flexShrink: 0,
     transition: 'background 0.15s',
+  },
+
+  // Follow styles
+  followStats: {
+    display: 'flex',
+    gap: '16px',
+    marginBottom: '8px',
+  },
+  followStatBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '14px',
+    cursor: 'pointer',
+    padding: 0,
+    fontFamily: "'Poppins', sans-serif",
+    transition: 'color 0.2s',
+  },
+  followBtn: {
+    padding: '8px 28px',
+    borderRadius: '9999px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #00d4ff, #0096c7)',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+    boxShadow: '0 3px 12px rgba(0,212,255,0.25)',
+    transition: 'all 0.2s',
+    marginBottom: '14px',
+    marginRight: '15px'
+  },
+  unfollowBtn: {
+    padding: '8px 28px',
+    borderRadius: '9999px',
+    border: '2px solid rgba(100,150,200,0.4)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    marginBottom: '14px',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.7)',
+    backdropFilter: 'blur(6px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  followModal: {
+    width: '100%',
+    maxWidth: '420px',
+    maxHeight: '70vh',
+    background: '#1a1a2e',
+    borderRadius: '16px',
+    border: '1px solid rgba(100,150,200,0.2)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden',
+  },
+  followModalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px 20px',
+    borderBottom: '1px solid rgba(100,150,200,0.15)',
+  },
+  followModalTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    margin: 0,
+  },
+  followModalClose: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '18px',
+    cursor: 'pointer',
+    padding: '4px',
+  },
+  followModalBody: {
+    overflowY: 'auto' as const,
+    flex: 1,
+  },
+  followUserRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 20px',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+    borderBottom: '1px solid rgba(100,150,200,0.08)',
+  },
+  followUserAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    objectFit: 'cover' as const,
+    flexShrink: 0,
+  },
+  followUserAvatarPh: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    background: 'rgba(30,45,80,0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  followUserName: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#fff',
+  },
+  followUserHandle: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.45)',
   },
 };
 

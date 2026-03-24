@@ -21,7 +21,7 @@ import resend
 import os
 
 from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer
-from .models import Track, Project, Publication, Like, TrackLike
+from .models import Track, Project, Publication, Like, TrackLike, Follow
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 User = get_user_model()
@@ -354,7 +354,64 @@ class PublicUserProfileView(APIView):
         profile_data = PublicProfileSerializer(user, context=ctx).data
         tracks = Track.objects.filter(user=user)
         profile_data['tracks'] = PublicTrackSerializer(tracks, many=True, context=ctx).data
+        profile_data['follower_count'] = user.followers_set.count()
+        profile_data['following_count'] = user.following_set.count()
+        profile_data['is_following'] = (
+            request.user.is_authenticated and
+            Follow.objects.filter(follower=request.user, following=user).exists()
+        )
         return Response(profile_data)
+
+
+class ToggleFollowView(APIView):
+    """Follow or unfollow a user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, username):
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if target == request.user:
+            return Response({'error': 'Cannot follow yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+        follow, created = Follow.objects.get_or_create(follower=request.user, following=target)
+        if created:
+            return Response({'following': True, 'follower_count': target.followers_set.count()})
+        else:
+            follow.delete()
+            return Response({'following': False, 'follower_count': target.followers_set.count()})
+
+
+class FollowersListView(APIView):
+    """List a user's followers."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username):
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        followers = User.objects.filter(following_set__following=user)
+        ctx = {'request': request}
+        return Response(PublicProfileSerializer(followers, many=True, context=ctx).data)
+
+
+class FollowingListView(APIView):
+    """List users that a user follows."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username):
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        following = User.objects.filter(followers_set__follower=user)
+        ctx = {'request': request}
+        return Response(PublicProfileSerializer(following, many=True, context=ctx).data)
 
 
 def _strip_accents(text):
