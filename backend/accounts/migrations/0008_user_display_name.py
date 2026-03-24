@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0007_alter_track_audio_file_alter_track_id_and_more'),
+        ('accounts', '0007_project_publication'),
     ]
 
     operations = [
