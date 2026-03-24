@@ -295,7 +295,8 @@ const ProfilePage = () => {
       } else {
         setIsOwnProfile(false);
         try {
-          const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/`);
+          const publicHeaders: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+          const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/`, { headers: publicHeaders });
           if (!res.ok) {
             if (res.status === 404) {
               setError('User not found');
