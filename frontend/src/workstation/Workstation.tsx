@@ -89,25 +89,33 @@ const DAW = () => {
 
   useEffect(() => {
     document.title = `${projectName} | Sonara DAW`;
-    // Auth guard: if no token at all, redirect immediately.
-    // For API calls, apiFetch (used in projectApi) handles refresh automatically.
-    if (!localStorage.getItem('accessToken') && !localStorage.getItem('refreshToken')) {
-      navigate('/login');
-    }
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) navigate('/login');
   }, [navigate, projectName]);
 
-  // Load project from server on mount
+  // Load project from server on mount, or reset for a fresh project
   useEffect(() => {
     const id = projectId ? parseInt(projectId) : null;
     if (id) {
       getProject(id).then((proj) => {
         useDawStore.getState().setServerProjectId(proj.id);
         useDawStore.getState().loadProjectData(proj.data);
-      }).catch(() => {
-        navigate('/404', { replace: true });
+      }).catch((err) => {
+        console.error('Failed to load project:', err);
+      });
+    } else {
+      // Full reset for new project — clear tracks, undo history, editing state
+      const s = useDawStore.getState();
+      s.setServerProjectId(null);
+      s.loadProjectData({
+        projectName: '[Untitled]',
+        bpm: 120,
+        timeSignature: { numerator: 4, denominator: 4 },
+        musicalKey: 'C',
+        tracks: [],
       });
     }
-  }, [projectId, navigate]);
+  }, [projectId]);
 
   // Save project
   const handleSaveProject = useCallback(async () => {
@@ -262,10 +270,10 @@ const DAW = () => {
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Main content column */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-      <MenuBar />
-      <Transport />
+          <MenuBar />
+          <Transport />
 
-      {/*
+          {/*
         Single scroll container for everything.
         - Scrolls both X (timeline) and Y (tracks).
         - Track list column is position:sticky left:0, so it stays
@@ -273,182 +281,182 @@ const DAW = () => {
         - Because there's only ONE scrollable div, vertical alignment
           between track list and timeline is guaranteed.
       */}
-      <div style={styles.scrollContainer} data-scroll-container>
-        <div style={styles.scrollContent}>
+          <div style={styles.scrollContainer} data-scroll-container>
+            <div style={styles.scrollContent}>
 
-          {/* ═══ Header row ═══ */}
-          <div style={styles.headerRow}>
-            <div style={styles.trackListHeader}>
-              <button onClick={() => addTrack('instrument')} style={styles.addTrackButton}>+ Instrument</button>
-              <button onClick={() => addTrack('audio')} style={styles.addTrackButton}>+ Audio</button>
-            </div>
-            <div style={styles.timelineHeaderCell}>
-              <Timeline mode="header" />
-            </div>
-          </div>
+              {/* ═══ Header row ═══ */}
+              <div style={styles.headerRow}>
+                <div style={styles.trackListHeader}>
+                  <button onClick={() => addTrack('instrument')} style={styles.addTrackButton}>+ Instrument</button>
+                  <button onClick={() => addTrack('audio')} style={styles.addTrackButton}>+ Audio</button>
+                </div>
+                <div style={styles.timelineHeaderCell}>
+                  <Timeline mode="header" />
+                </div>
+              </div>
 
-          {/* ═══ Track rows ═══ */}
-          {(() => {
-            const hasSolo = tracks.some((t) => t.solo);
-            return tracks.map((track, index) => {
-              const isGrayed = hasSolo && !track.solo;
-              const isDragging = dragTrackIdx === index;
-              // dropTargetIdx represents the insertion gap: "insert before this index"
-              // Show line above this row if dropTargetIdx === index
-              // Show line below last row if dropTargetIdx === tracks.length
-              const showLineAbove = dropTargetIdx === index
-                && dragTrackIdx !== null
-                && dragTrackIdx !== index
-                && dragTrackIdx !== index - 1;
-              const showLineBelow = index === tracks.length - 1
-                && dropTargetIdx === tracks.length
-                && dragTrackIdx !== null
-                && dragTrackIdx !== tracks.length - 1;
+              {/* ═══ Track rows ═══ */}
+              {(() => {
+                const hasSolo = tracks.some((t) => t.solo);
+                return tracks.map((track, index) => {
+                  const isGrayed = hasSolo && !track.solo;
+                  const isDragging = dragTrackIdx === index;
+                  // dropTargetIdx represents the insertion gap: "insert before this index"
+                  // Show line above this row if dropTargetIdx === index
+                  // Show line below last row if dropTargetIdx === tracks.length
+                  const showLineAbove = dropTargetIdx === index
+                    && dragTrackIdx !== null
+                    && dragTrackIdx !== index
+                    && dragTrackIdx !== index - 1;
+                  const showLineBelow = index === tracks.length - 1
+                    && dropTargetIdx === tracks.length
+                    && dragTrackIdx !== null
+                    && dragTrackIdx !== tracks.length - 1;
 
-              return (
-              <React.Fragment key={track.id}>
-                <div
-                  style={{
-                    ...styles.bodyRow,
-                    height: automationOpen.has(track.id) ? `${80 + 60}px` : '80px',
-                    opacity: isDragging ? 0.4 : isGrayed ? 0.35 : 1,
-                    transition: 'opacity 0.15s',
-                    position: 'relative',
-                    borderBottom: '1px solid #2a2a4e',
-                  }}
-                  data-track-row={track.id}
-                  onDragOver={(e) => {
-                    if (dragTrackIdx === null) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    // Determine if cursor is in top or bottom half
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const y = e.clientY - rect.top;
-                    const half = rect.height / 2;
-                    if (y < half) {
-                      setDropTargetIdx(index); // insert before this row
-                    } else {
-                      setDropTargetIdx(index + 1); // insert after this row
-                    }
-                  }}
-                  onDragLeave={(e) => {
-                    // Only clear if actually leaving the row (not entering a child)
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      setDropTargetIdx(null);
-                    }
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragTrackIdx !== null && dropTargetIdx !== null) {
-                      // Calculate actual target: if dragging down, account for removal
-                      let targetIdx = dropTargetIdx;
-                      if (dragTrackIdx < targetIdx) targetIdx -= 1;
-                      if (dragTrackIdx !== targetIdx) {
-                        reorderTrack(dragTrackIdx, targetIdx);
-                      }
-                    }
-                    setDragTrackIdx(null);
-                    setDropTargetIdx(null);
-                  }}
-                >
-                  {/* Insertion indicator — above */}
-                  {showLineAbove && (
-                    <div style={styles.dropIndicator} />
-                  )}
-
-                  <div style={{
-                    ...styles.trackListCell,
-                    height: automationOpen.has(track.id) ? `${80 + 60}px` : '80px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}>
-                    <div style={{ height: '80px', display: 'flex' }}>
-                      {/* Drag handle */}
+                  return (
+                    <React.Fragment key={track.id}>
                       <div
-                        draggable
-                        onDragStart={(e) => {
-                          setDragTrackIdx(index);
-                          e.dataTransfer.effectAllowed = 'move';
-                          const ghost = document.createElement('div');
-                          ghost.style.opacity = '0';
-                          document.body.appendChild(ghost);
-                          e.dataTransfer.setDragImage(ghost, 0, 0);
-                          setTimeout(() => document.body.removeChild(ghost), 0);
+                        style={{
+                          ...styles.bodyRow,
+                          height: automationOpen.has(track.id) ? `${80 + 60}px` : '80px',
+                          opacity: isDragging ? 0.4 : isGrayed ? 0.35 : 1,
+                          transition: 'opacity 0.15s',
+                          position: 'relative',
+                          borderBottom: '1px solid #2a2a4e',
                         }}
-                        onDragEnd={() => {
+                        data-track-row={track.id}
+                        onDragOver={(e) => {
+                          if (dragTrackIdx === null) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          // Determine if cursor is in top or bottom half
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const y = e.clientY - rect.top;
+                          const half = rect.height / 2;
+                          if (y < half) {
+                            setDropTargetIdx(index); // insert before this row
+                          } else {
+                            setDropTargetIdx(index + 1); // insert after this row
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          // Only clear if actually leaving the row (not entering a child)
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setDropTargetIdx(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragTrackIdx !== null && dropTargetIdx !== null) {
+                            // Calculate actual target: if dragging down, account for removal
+                            let targetIdx = dropTargetIdx;
+                            if (dragTrackIdx < targetIdx) targetIdx -= 1;
+                            if (dragTrackIdx !== targetIdx) {
+                              reorderTrack(dragTrackIdx, targetIdx);
+                            }
+                          }
                           setDragTrackIdx(null);
                           setDropTargetIdx(null);
                         }}
-                        style={styles.dragHandle}
-                        title="Drag to reorder"
                       >
-                        ⠿
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <TrackRow
-                          trackId={track.id}
-                          automationOpen={automationOpen.has(track.id)}
-                          onToggleAutomation={() => toggleAutomation(track.id)}
-                        />
-                      </div>
-                    </div>
-                    {automationOpen.has(track.id) && (
-                      <div style={styles.automationLabel}>
-                        <span style={styles.automationLabelText}>Vol</span>
-                      </div>
-                    )}
-                  </div>
-                  <div style={styles.timelineCell}>
-                    <Timeline
-                      mode="track"
-                      trackId={track.id}
-                      showAutomation={automationOpen.has(track.id)}
-                    />
-                  </div>
+                        {/* Insertion indicator — above */}
+                        {showLineAbove && (
+                          <div style={styles.dropIndicator} />
+                        )}
 
-                  {/* Insertion indicator — below last track */}
-                  {showLineBelow && (
-                    <div style={{ ...styles.dropIndicator, top: 'auto', bottom: '-2px' }} />
-                  )}
-                </div>
-              </React.Fragment>
-              );
-            });
-          })()}
+                        <div style={{
+                          ...styles.trackListCell,
+                          height: automationOpen.has(track.id) ? `${80 + 60}px` : '80px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}>
+                          <div style={{ height: '80px', display: 'flex' }}>
+                            {/* Drag handle */}
+                            <div
+                              draggable
+                              onDragStart={(e) => {
+                                setDragTrackIdx(index);
+                                e.dataTransfer.effectAllowed = 'move';
+                                const ghost = document.createElement('div');
+                                ghost.style.opacity = '0';
+                                document.body.appendChild(ghost);
+                                e.dataTransfer.setDragImage(ghost, 0, 0);
+                                setTimeout(() => document.body.removeChild(ghost), 0);
+                              }}
+                              onDragEnd={() => {
+                                setDragTrackIdx(null);
+                                setDropTargetIdx(null);
+                              }}
+                              style={styles.dragHandle}
+                              title="Drag to reorder"
+                            >
+                              ⠿
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <TrackRow
+                                trackId={track.id}
+                                automationOpen={automationOpen.has(track.id)}
+                                onToggleAutomation={() => toggleAutomation(track.id)}
+                              />
+                            </div>
+                          </div>
+                          {automationOpen.has(track.id) && (
+                            <div style={styles.automationLabel}>
+                              <span style={styles.automationLabelText}>Vol</span>
+                            </div>
+                          )}
+                        </div>
+                        <div style={styles.timelineCell}>
+                          <Timeline
+                            mode="track"
+                            trackId={track.id}
+                            showAutomation={automationOpen.has(track.id)}
+                          />
+                        </div>
 
-          {/* ═══ Empty area drop zone for audio files ═══ */}
-          <div
-            style={{
-              ...styles.emptyDropZone,
-              ...(emptyDropHover ? styles.emptyDropZoneActive : {}),
-            }}
-            onDragOver={(e) => {
-              // Only respond to file drags, not track reorder drags
-              if (dragTrackIdx !== null) return;
-              if (e.dataTransfer.types.includes('Files')) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
-                setEmptyDropHover(true);
-              }
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setEmptyDropHover(false);
-              }
-            }}
-            onDrop={handleEmptyAreaDrop}
-          >
-            {emptyDropHover ? (
-              <span style={styles.emptyDropText}>Drop file to create new track</span>
-            ) : (
-              <span style={styles.emptyDropHint}>Drag audio or MIDI files here to add tracks</span>
-            )}
+                        {/* Insertion indicator — below last track */}
+                        {showLineBelow && (
+                          <div style={{ ...styles.dropIndicator, top: 'auto', bottom: '-2px' }} />
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                });
+              })()}
+
+              {/* ═══ Empty area drop zone for audio files ═══ */}
+              <div
+                style={{
+                  ...styles.emptyDropZone,
+                  ...(emptyDropHover ? styles.emptyDropZoneActive : {}),
+                }}
+                onDragOver={(e) => {
+                  // Only respond to file drags, not track reorder drags
+                  if (dragTrackIdx !== null) return;
+                  if (e.dataTransfer.types.includes('Files')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    setEmptyDropHover(true);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setEmptyDropHover(false);
+                  }
+                }}
+                onDrop={handleEmptyAreaDrop}
+              >
+                {emptyDropHover ? (
+                  <span style={styles.emptyDropText}>Drop file to create new track</span>
+                ) : (
+                  <span style={styles.emptyDropHint}>Drag audio or MIDI files here to add tracks</span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {pianoRollClipId && <PianoRoll />}
-      <MixerPanel />
+          {pianoRollClipId && <PianoRoll />}
+          <MixerPanel />
         </div>
         {/* History panel as flex sibling */}
         <HistoryPanel />

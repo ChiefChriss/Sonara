@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.files.storage import default_storage
-from .models import Track, Project, Publication
+from .models import Track, Project, Publication, Like, TrackLike
 
 User = get_user_model()
 
@@ -17,7 +17,7 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password',
             'is_listener', 'is_creator', 'role',
             'header_image', 'profile_picture',
-            'bio',
+            'bio', 'display_name',
         )
 
     def create(self, validated_data):
@@ -37,11 +37,13 @@ def coerce_bool(value):
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
-    """PATCH profile: bio, roles, header_image, profile_picture. Set remove_* to True to clear."""
+    """PATCH profile: bio, roles, header_image, profile_picture, display_name, username."""
     remove_header_image = serializers.BooleanField(write_only=True, required=False, default=False)
     remove_profile_picture = serializers.BooleanField(write_only=True, required=False, default=False)
     is_listener = serializers.BooleanField(required=False, default=False)
     is_creator = serializers.BooleanField(required=False, default=False)
+    username = serializers.CharField(required=False, min_length=3, max_length=30)
+    display_name = serializers.CharField(required=False, allow_blank=True, max_length=100)
 
     class Meta:
         model = User
@@ -49,7 +51,19 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             'bio', 'is_listener', 'is_creator',
             'header_image', 'profile_picture',
             'remove_header_image', 'remove_profile_picture',
+            'username', 'display_name',
         )
+
+    def validate_username(self, value):
+        import re
+        value = value.strip().lower()
+        if not re.match(r'^[a-z0-9_]+$', value):
+            raise serializers.ValidationError(
+                'Handle can only contain lowercase letters, numbers, and underscores.'
+            )
+        if User.objects.exclude(pk=self.instance.pk).filter(username=value).exists():
+            raise serializers.ValidationError('This handle is already taken.')
+        return value
 
     def validate_is_listener(self, value):
         return coerce_bool(value)
@@ -104,11 +118,18 @@ AUDIO_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
 
 class TrackSerializer(serializers.ModelSerializer):
     audio_file = serializers.FileField()
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Track
-        fields = ('id', 'title', 'audio_file', 'uploaded_at')
-        read_only_fields = ('id', 'uploaded_at')
+        fields = ('id', 'title', 'audio_file', 'cover_image', 'uploaded_at', 'play_count', 'like_count', 'is_liked')
+        read_only_fields = ('id', 'uploaded_at', 'play_count', 'like_count', 'is_liked')
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return TrackLike.objects.filter(user=request.user, track=obj).exists()
+        return False
 
     def validate_audio_file(self, value):
         if value.content_type not in ALLOWED_AUDIO_TYPES:
@@ -122,6 +143,37 @@ class TrackSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    """Public-facing user profile (no email, no password)."""
+    role = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'role', 'is_listener', 'is_creator',
+                  'header_image', 'profile_picture', 'bio', 'display_name')
+        read_only_fields = fields
+
+
+class PublicTrackSerializer(serializers.ModelSerializer):
+    """Public-facing track serializer with uploader info for search results."""
+    username = serializers.CharField(source='user.username', read_only=True)
+    display_name = serializers.CharField(source='user.display_name', read_only=True)
+    profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Track
+        fields = ('id', 'title', 'audio_file', 'cover_image', 'uploaded_at', 'play_count', 'like_count',
+                  'username', 'display_name', 'profile_picture', 'is_liked')
+        read_only_fields = fields
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return TrackLike.objects.filter(user=request.user, track=obj).exists()
+        return False
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -145,16 +197,24 @@ class ProjectListSerializer(serializers.ModelSerializer):
 
 class PublicationSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    display_name = serializers.CharField(source='user.display_name', read_only=True, default='')
     profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Publication
         fields = (
             'id', 'title', 'description', 'audio_file', 'cover_image',
-            'is_public', 'play_count', 'published_at',
-            'project', 'username', 'profile_picture',
+            'is_public', 'play_count', 'like_count', 'published_at',
+            'project', 'username', 'display_name', 'profile_picture', 'is_liked',
         )
-        read_only_fields = ('id', 'play_count', 'published_at', 'username', 'profile_picture')
+        read_only_fields = ('id', 'play_count', 'like_count', 'published_at', 'username', 'display_name', 'profile_picture', 'is_liked')
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return Like.objects.filter(user=request.user, publication=obj).exists()
+        return False
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user

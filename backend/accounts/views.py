@@ -17,12 +17,11 @@ from django.utils.decorators import method_decorator
 from django.conf import settings
 from django_ratelimit.decorators import ratelimit
 from datetime import datetime, timedelta
-from rest_framework.throttling import AnonRateThrottle
 import resend
 import os
 
-from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer
-from .models import Track, Project, Publication
+from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer
+from .models import Track, Project, Publication, Like, TrackLike
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 User = get_user_model()
@@ -198,11 +197,19 @@ class TrackListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Track.objects.filter(user=self.request.user)
 
+    def perform_create(self, serializer):
+        serializer.save()
+        user = self.request.user
+        if not user.is_creator:
+            user.is_creator = True
+            user.save(update_fields=['is_creator'])
 
-class TrackDeleteView(generics.DestroyAPIView):
-    """Delete a track (only if the requesting user owns it)."""
+
+class TrackUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
+    """Get, update, or delete a track (only if the requesting user owns it)."""
     serializer_class = TrackSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         return Track.objects.filter(user=self.request.user)
@@ -252,11 +259,19 @@ class PublicationListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Publication.objects.filter(user=self.request.user)
 
+    def perform_create(self, serializer):
+        serializer.save()
+        user = self.request.user
+        if not user.is_creator:
+            user.is_creator = True
+            user.save(update_fields=['is_creator'])
 
-class PublicationDeleteView(generics.DestroyAPIView):
-    """Delete a publication (only if owner)."""
+
+class PublicationUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
+    """Get, update, or delete a publication (only if owner)."""
     serializer_class = PublicationSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         return Publication.objects.filter(user=self.request.user)
@@ -269,6 +284,22 @@ class PublicationDeleteView(generics.DestroyAPIView):
         instance.delete()
 
 
+class PublicTracksView(generics.ListAPIView):
+    """List all tracks from all users, newest first. Public, no auth required."""
+    serializer_class = PublicTrackSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        return Track.objects.select_related('user').all()
+
+
+class TrackDetailView(generics.RetrieveAPIView):
+    """Get details of a single track. Public."""
+    queryset = Track.objects.select_related('user').all()
+    serializer_class = PublicTrackSerializer
+    permission_classes = [permissions.AllowAny]
+
+
 class PublicFeedView(generics.ListAPIView):
     """Public feed — list all published songs (no auth required)."""
     serializer_class = PublicationSerializer
@@ -276,6 +307,13 @@ class PublicFeedView(generics.ListAPIView):
 
     def get_queryset(self):
         return Publication.objects.filter(is_public=True)
+
+
+class PublicationDetailView(generics.RetrieveAPIView):
+    """Get details of a single publication. Public."""
+    queryset = Publication.objects.filter(is_public=True)
+    serializer_class = PublicationSerializer
+    permission_classes = [permissions.AllowAny]
 
 
 class UserPublicationsView(generics.ListAPIView):
@@ -288,13 +326,9 @@ class UserPublicationsView(generics.ListAPIView):
         return Publication.objects.filter(user__username=username, is_public=True)
 
 
-class PlayCountThrottle(AnonRateThrottle):
-    scope = 'play_count'
-
 class PublicationPlayView(APIView):
     """Increment play count for a publication."""
     permission_classes = [permissions.AllowAny]
-    throttle_classes = [PlayCountThrottle]
 
     def post(self, request, pk):
         try:
@@ -304,3 +338,223 @@ class PublicationPlayView(APIView):
             return Response({'status': 'ok'})
         except Publication.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class PublicUserProfileView(APIView):
+    """View any user's public profile and their tracks by username. No auth required."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username):
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        ctx = {'request': request}
+        profile_data = PublicProfileSerializer(user, context=ctx).data
+        tracks = Track.objects.filter(user=user)
+        profile_data['tracks'] = PublicTrackSerializer(tracks, many=True, context=ctx).data
+        return Response(profile_data)
+
+
+def _strip_accents(text):
+    """Remove diacritics/accents: ë→e, é→e, ñ→n, etc."""
+    import unicodedata
+    nfkd = unicodedata.normalize('NFKD', text)
+    return ''.join(c for c in nfkd if not unicodedata.combining(c)).lower()
+
+
+def _fuzzy_match(haystack, needle_words):
+    """Check if every needle word appears in the accent-stripped haystack."""
+    h = _strip_accents(haystack)
+    return all(_strip_accents(w) in h for w in needle_words)
+
+
+class SearchView(APIView):
+    """Unified search across users, tracks, and publications. Public, no auth required.
+    Splits the query into words and does accent-insensitive matching."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('q', '').strip()
+        if not query:
+            return Response({'users': [], 'tracks': [], 'publications': []})
+
+        words = query.split()
+
+        # Build a loose DB filter using the first word to narrow candidates,
+        # then do precise accent-insensitive filtering in Python.
+        first = words[0] if words else ''
+
+        user_candidates = User.objects.filter(
+            db_models.Q(username__icontains=first) |
+            db_models.Q(bio__icontains=first)
+        )[:100]
+        users = [
+            u for u in user_candidates
+            if _fuzzy_match(u.username + ' ' + (u.bio or ''), words)
+        ][:10]
+
+        track_candidates = Track.objects.filter(
+            db_models.Q(title__icontains=first) |
+            db_models.Q(user__username__icontains=first)
+        ).select_related('user')[:200]
+        tracks = [
+            t for t in track_candidates
+            if _fuzzy_match(t.title + ' ' + t.user.username, words)
+        ][:30]
+
+        pub_candidates = Publication.objects.filter(
+            db_models.Q(is_public=True) & (
+                db_models.Q(title__icontains=first) |
+                db_models.Q(description__icontains=first) |
+                db_models.Q(user__username__icontains=first)
+            )
+        ).select_related('user')[:200]
+        pubs = [
+            p for p in pub_candidates
+            if _fuzzy_match(p.title + ' ' + (p.description or '') + ' ' + p.user.username, words)
+        ][:30]
+
+        ctx = {'request': request}
+        return Response({
+            'users': PublicProfileSerializer(users, many=True, context=ctx).data,
+            'tracks': PublicTrackSerializer(tracks, many=True, context=ctx).data,
+            'publications': PublicationSerializer(pubs, many=True, context=ctx).data,
+        })
+
+
+# ═══════════════════════════════════════════
+# Like / Library endpoints
+# ═══════════════════════════════════════════
+
+class ToggleLikeView(APIView):
+    """Toggle like on a publication. Returns new like state and count."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            pub = Publication.objects.get(pk=pk, is_public=True)
+        except Publication.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        like, created = Like.objects.get_or_create(user=request.user, publication=pub)
+        if created:
+            # Liked
+            pub.like_count = db_models.F('like_count') + 1
+            pub.save(update_fields=['like_count'])
+            pub.refresh_from_db()
+            return Response({'liked': True, 'like_count': pub.like_count})
+        else:
+            # Unlike
+            like.delete()
+            pub.like_count = db_models.F('like_count') - 1
+            pub.save(update_fields=['like_count'])
+            pub.refresh_from_db()
+            return Response({'liked': False, 'like_count': pub.like_count})
+
+
+class LibraryView(APIView):
+    """List the authenticated user's liked publications and tracks (personal library)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ctx = {'request': request}
+
+        # Liked publications
+        liked_pub_ids = Like.objects.filter(
+            user=request.user
+        ).values_list('publication_id', flat=True)
+        pubs = Publication.objects.filter(
+            id__in=liked_pub_ids, is_public=True
+        ).select_related('user')
+
+        # Liked tracks
+        liked_track_ids = TrackLike.objects.filter(
+            user=request.user
+        ).values_list('track_id', flat=True)
+        tracks = Track.objects.filter(
+            id__in=liked_track_ids
+        ).select_related('user')
+
+        return Response({
+            'publications': PublicationSerializer(pubs, many=True, context=ctx).data,
+            'tracks': PublicTrackSerializer(tracks, many=True, context=ctx).data,
+        })
+
+
+class TrackPlayView(APIView):
+    """Increment play count for a track."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, pk):
+        try:
+            track = Track.objects.get(pk=pk)
+            track.play_count = db_models.F('play_count') + 1
+            track.save(update_fields=['play_count'])
+            return Response({'status': 'ok'})
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ToggleTrackLikeView(APIView):
+    """Toggle like on a track. Returns new like state and count."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            track = Track.objects.get(pk=pk)
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        like, created = TrackLike.objects.get_or_create(user=request.user, track=track)
+        if created:
+            track.like_count = db_models.F('like_count') + 1
+            track.save(update_fields=['like_count'])
+            track.refresh_from_db()
+            return Response({'liked': True, 'like_count': track.like_count})
+        else:
+            like.delete()
+            track.like_count = db_models.F('like_count') - 1
+            track.save(update_fields=['like_count'])
+            return Response({'liked': False, 'like_count': track.like_count})
+
+
+# ═══════════════════════════════════════════
+# Home Page Content Endpoints
+# ═══════════════════════════════════════════
+
+class TrendingTracksView(APIView):
+    """Returns top 10 Tracks and Publications ranked by play count."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        ctx = {'request': request}
+        
+        # Get top 10 tracks by play_count
+        top_tracks = Track.objects.order_by('-play_count')[:10]
+        # Get top 10 public publications by play_count
+        top_pubs = Publication.objects.filter(is_public=True).order_by('-play_count')[:10]
+
+        return Response({
+            'tracks': PublicTrackSerializer(top_tracks, many=True, context=ctx).data,
+            'publications': PublicationSerializer(top_pubs, many=True, context=ctx).data,
+        })
+
+
+class NewReleasesView(APIView):
+    """Returns 10 most recently uploaded Tracks and Publications."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        ctx = {'request': request}
+
+        # Get 10 newest tracks
+        new_tracks = Track.objects.order_by('-uploaded_at')[:10]
+        # Get 10 newest public publications
+        new_pubs = Publication.objects.filter(is_public=True).order_by('-published_at')[:10]
+
+        return Response({
+            'tracks': PublicTrackSerializer(new_tracks, many=True, context=ctx).data,
+            'publications': PublicationSerializer(new_pubs, many=True, context=ctx).data,
+        })

@@ -1,10 +1,14 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiFetch } from './utils/api';
+import { useParams, useNavigate } from 'react-router-dom';
+import NotFound from './NotFound';
+import ImageCropModal from './components/ImageCropModal';
+import { usePlayerStore } from './stores/playerStore';
+import TrackEditModal from './components/TrackEditModal';
 
 interface UserProfile {
   id: number;
   username: string;
+  display_name: string;
   email: string;
   role: string;
   is_listener: boolean;
@@ -19,17 +23,21 @@ interface Track {
   title: string;
   audio_file: string;
   uploaded_at: string;
+  cover_image?: string;
 }
 
 const TABS = ['Posts', 'Tracks', 'Playlists', 'Reposts'] as const;
 
 const ProfilePage = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Posts');
   const [editing, setEditing] = useState(false);
   const [editBio, setEditBio] = useState('');
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editHandle, setEditHandle] = useState('');
   const [editIsListener, setEditIsListener] = useState(false);
   const [editIsCreator, setEditIsCreator] = useState(false);
   const [headerFile, setHeaderFile] = useState<File | null>(null);
@@ -41,23 +49,29 @@ const ProfilePage = () => {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [tracksLoading, setTracksLoading] = useState(false);
   const [trackFile, setTrackFile] = useState<File | null>(null);
-  const [trackTitle, setTrackTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
+  const [modalMode, setModalMode] = useState<'upload_track' | 'edit_track' | 'edit_pub' | null>(null);
+  const [editTargetId, setEditTargetId] = useState<number | undefined>(undefined);
+  const [editInitialTitle, setEditInitialTitle] = useState('');
+  const [editInitialCover, setEditInitialCover] = useState<string | null>(null);
   const [deletingTrackId, setDeletingTrackId] = useState<number | null>(null);
-  const [playingTrackId, setPlayingTrackId] = useState<number | null>(null);
-  const [publications, setPublications] = useState<any[]>([]);
-  const [pubsLoading, setPubsLoading] = useState(false);
-  const [deletingPubId, setDeletingPubId] = useState<number | null>(null);
-  const [playingPubId, setPlayingPubId] = useState<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
+
   const trackInputRef = useRef<HTMLInputElement>(null);
   const headerInputRef = useRef<HTMLInputElement>(null);
   const pfpInputRef = useRef<HTMLInputElement>(null);
+  const [cropTarget, setCropTarget] = useState<'header' | 'pfp' | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { handle } = useParams<{ handle: string }>();
+  const urlUsername = handle?.startsWith('@') ? handle.slice(1) : handle;
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
   const startEditing = () => {
     setEditBio(user?.bio ?? '');
+    setEditDisplayName(user?.display_name ?? '');
+    setEditHandle(user?.username ?? '');
     setEditIsListener(user?.is_listener ?? false);
     setEditIsCreator(user?.is_creator ?? false);
     setHeaderFile(null);
@@ -78,9 +92,13 @@ const ProfilePage = () => {
   };
 
   const fetchTracks = useCallback(async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) return;
     setTracksLoading(true);
     try {
-      const response = await apiFetch('/api/auth/tracks/');
+      const response = await fetch(`${API_BASE_URL}/api/auth/tracks/`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!response.ok) throw new Error('Failed to load tracks');
       const data = await response.json();
       setTracks(data);
@@ -89,98 +107,20 @@ const ProfilePage = () => {
     } finally {
       setTracksLoading(false);
     }
-  }, []);
-
-  const fetchPublications = useCallback(async () => {
-    setPubsLoading(true);
-    try {
-      const response = await apiFetch('/api/auth/publications/');
-      if (!response.ok) throw new Error('Failed to load publications');
-      const data = await response.json();
-      setPublications(data);
-    } catch {
-      /* silently fail */
-    } finally {
-      setPubsLoading(false);
-    }
-  }, []);
-
-  const deletePublication = async (pubId: number) => {
-    if (!confirm('Remove this published song?')) return;
-    setDeletingPubId(pubId);
-    try {
-      await apiFetch(`/api/auth/publications/${pubId}/`, {
-        method: 'DELETE',
-      });
-      if (playingPubId === pubId) {
-        audioRef.current?.pause();
-        setPlayingPubId(null);
-      }
-      setPublications((prev) => prev.filter((p) => p.id !== pubId));
-    } catch { /* ignore */ }
-    setDeletingPubId(null);
-  };
-
-  const togglePlayPub = (pub: any) => {
-    if (playingPubId === pub.id) {
-      audioRef.current?.pause();
-      setPlayingPubId(null);
-      return;
-    }
-    // Stop any playing track too
-    setPlayingTrackId(null);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = new Audio(pub.audio_file);
-    } else {
-      audioRef.current = new Audio(pub.audio_file);
-    }
-    audioRef.current.onended = () => setPlayingPubId(null);
-    audioRef.current.play();
-    setPlayingPubId(pub.id);
-  };
-
-  const uploadTrack = async () => {
-    if (!trackFile) return;
-    setUploading(true);
-    setUploadError('');
-    try {
-      const formData = new FormData();
-      formData.append('audio_file', trackFile);
-      formData.append('title', trackTitle.trim() || trackFile.name.replace(/\.[^/.]+$/, ''));
-      const response = await apiFetch('/api/auth/tracks/', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const msg =
-          (Array.isArray(errData?.audio_file) ? errData.audio_file[0] : null) ||
-          (Array.isArray(errData?.title) ? errData.title[0] : null) ||
-          errData?.detail ||
-          `Upload failed (${response.status})`;
-        throw new Error(msg);
-      }
-      setTrackFile(null);
-      setTrackTitle('');
-      fetchTracks();
-    } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
+  }, [API_BASE_URL]);
 
   const deleteTrack = async (trackId: number) => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) return;
     setDeletingTrackId(trackId);
     try {
-      const response = await apiFetch(`/api/auth/tracks/${trackId}/`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/tracks/${trackId}/`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!response.ok) throw new Error('Delete failed');
-      if (playingTrackId === trackId) {
-        audioRef.current?.pause();
-        setPlayingTrackId(null);
+      if (currentTrack?.id === trackId && currentTrack?.type === 'track') {
+        stop();
       }
       setTracks((prev) => prev.filter((t) => t.id !== trackId));
     } catch {
@@ -191,27 +131,28 @@ const ProfilePage = () => {
   };
 
   const togglePlay = (track: Track) => {
-    if (playingTrackId === track.id) {
-      audioRef.current?.pause();
-      setPlayingTrackId(null);
+    if (currentTrack?.id === track.id && currentTrack?.type === 'track') {
+      togglePlayPause();
       return;
     }
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    const audio = new Audio(track.audio_file);
-    audio.addEventListener('ended', () => setPlayingTrackId(null));
-    audio.play();
-    audioRef.current = audio;
-    setPlayingTrackId(track.id);
+    play({
+      id: track.id, type: 'track',
+      title: track.title, artist: user?.display_name || user?.username || urlUsername || 'Unknown',
+      audioUrl: track.audio_file, coverImage: user?.profile_picture || null,
+      artistHandle: user?.username || urlUsername || '',
+    });
   };
 
   const saveProfile = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) return;
     setSaving(true);
     setSaveError('');
     try {
       const formData = new FormData();
       formData.append('bio', editBio);
+      formData.append('display_name', editDisplayName);
+      formData.append('username', editHandle.trim().toLowerCase());
       formData.append('is_listener', String(editIsListener));
       formData.append('is_creator', String(editIsCreator));
       if (headerFile) formData.append('header_image', headerFile);
@@ -219,8 +160,11 @@ const ProfilePage = () => {
       if (removeHeader) formData.append('remove_header_image', 'true');
       if (removePfp) formData.append('remove_profile_picture', 'true');
 
-      const response = await apiFetch('/api/auth/profile/', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
         method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: formData,
       });
       if (!response.ok) {
@@ -231,6 +175,8 @@ const ProfilePage = () => {
           (Array.isArray(errData?.header_image) ? errData.header_image[0] : null) ||
           (Array.isArray(errData?.profile_picture) ? errData.profile_picture[0] : null) ||
           (Array.isArray(errData?.bio) ? errData.bio[0] : null) ||
+          (Array.isArray(errData?.username) ? errData.username[0] : null) ||
+          (Array.isArray(errData?.display_name) ? errData.display_name[0] : null) ||
           errData?.detail ||
           `Failed to update profile (${response.status})`;
         throw new Error(msg);
@@ -242,6 +188,10 @@ const ProfilePage = () => {
       setPfpFile(null);
       setRemoveHeader(false);
       setRemovePfp(false);
+      // If username changed, redirect to new handle URL
+      if (data.username !== urlUsername) {
+        navigate(`/@${data.username}`, { replace: true });
+      }
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -249,24 +199,75 @@ const ProfilePage = () => {
     }
   };
 
-  // Fetch profile on mount
   useEffect(() => {
+    if (!handle?.startsWith('@')) return;
+
     const fetchProfile = async () => {
-      try {
-        const response = await apiFetch('/api/auth/profile/');
-        if (!response.ok) {
-          throw new Error('Failed to fetch profile data');
+      const accessToken = localStorage.getItem('accessToken');
+
+      let loggedInUsername: string | null = null;
+      if (accessToken) {
+        try {
+          const meRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            loggedInUsername = meData.username;
+          }
+        } catch { /* not logged in or token expired */ }
+      }
+
+      if (loggedInUsername && loggedInUsername === urlUsername) {
+        setIsOwnProfile(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!res.ok) throw new Error('Failed to fetch profile');
+          setUser(await res.json());
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Something went wrong');
+        } finally {
+          setLoading(false);
         }
-        const data = await response.json();
-        setUser(data);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Something went wrong');
-      } finally {
-        setLoading(false);
+      } else {
+        setIsOwnProfile(false);
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/`);
+          if (!res.ok) {
+            if (res.status === 404) {
+              setError('User not found');
+            } else {
+              throw new Error('Failed to load profile');
+            }
+            setLoading(false);
+            return;
+          }
+          const data = await res.json();
+          const publicTracks: Track[] = data.tracks || [];
+          setUser({
+            id: data.id,
+            username: data.username,
+            email: '',
+            role: data.role,
+            is_listener: data.is_listener,
+            is_creator: data.is_creator,
+            header_image: data.header_image,
+            profile_picture: data.profile_picture,
+            bio: data.bio,
+            display_name: data.display_name || '',
+          });
+          setTracks(publicTracks);
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : 'Something went wrong');
+        } finally {
+          setLoading(false);
+        }
       }
     };
     fetchProfile();
-  }, [navigate]);
+  }, [navigate, handle, urlUsername, API_BASE_URL]);
 
   // Update document title when user loads
   useEffect(() => {
@@ -278,9 +279,8 @@ const ProfilePage = () => {
   }, [user?.username]);
 
   useEffect(() => {
-    fetchTracks();
-    fetchPublications();
-  }, [fetchTracks, fetchPublications]);
+    if (isOwnProfile) fetchTracks();
+  }, [fetchTracks, isOwnProfile]);
 
   const headerPreviewUrl = useMemo(
     () => (headerFile ? URL.createObjectURL(headerFile) : null),
@@ -307,6 +307,10 @@ const ProfilePage = () => {
     if (editing && removePfp) return null;
     if (editing && pfpPreviewUrl) return pfpPreviewUrl;
     return user?.profile_picture ?? null;
+  }
+
+  if (!handle?.startsWith('@')) {
+    return <NotFound />;
   }
 
   if (loading) {
@@ -348,12 +352,233 @@ const ProfilePage = () => {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        button:hover { opacity: 0.9; transform: translateY(-2px); }
+        button:hover { opacity: 0.9; }
         button:active { transform: scale(0.98); }
-        textarea:focus { outline: none; border-color: #00d4ff; box-shadow: 0 0 15px rgba(0, 212, 255, 0.3); }
+        textarea:focus, input[type=text]:focus { outline: none; border-color: #00d4ff !important; box-shadow: 0 0 15px rgba(0, 212, 255, 0.3); }
         .profile-upload-card:hover { border-color: rgba(0, 212, 255, 0.5); background: rgba(30, 45, 80, 0.6); }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .edit-icon-btn:hover { background: rgba(255,255,255,0.25) !important; transform: scale(1.05); }
+        .role-pill-btn { transition: all 0.2s ease !important; }
+        .role-pill-btn:hover { transform: none !important; opacity: 1 !important; }
+        .edit-modal-backdrop { animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
+
+      {/* Hidden file inputs (always in DOM) */}
+      <input
+        ref={headerInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) {
+            setCropImageSrc(URL.createObjectURL(f));
+            setCropTarget('header');
+          }
+          e.target.value = '';
+        }}
+        style={styles.hiddenFileInput}
+        disabled={saving}
+      />
+      <input
+        ref={pfpInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) {
+            setCropImageSrc(URL.createObjectURL(f));
+            setCropTarget('pfp');
+          }
+          e.target.value = '';
+        }}
+        style={styles.hiddenFileInput}
+        disabled={saving}
+      />
+
+      {/* ═══════════════ EDIT MODE POPUP MODAL ═══════════════ */}
+      {isOwnProfile && editing && (
+        <div className="edit-modal-backdrop" style={styles.editBackdrop} onClick={cancelEditing}>
+          <div style={styles.editModal} onClick={(e) => e.stopPropagation()}>
+            {/* Edit top bar */}
+            <header style={styles.editTopBar}>
+              <button type="button" onClick={cancelEditing} style={styles.editCloseBtn} aria-label="Close" disabled={saving}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+              <span style={styles.editTopBarTitle}>Edit profile</span>
+              <button type="button" onClick={saveProfile} style={styles.editSaveBtn} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </header>
+
+            {/* Editable cover photo */}
+            <div style={{ position: 'relative' }}>
+              <div
+                style={{
+                  ...styles.editCover,
+                  ...(getHeaderImageUrl()
+                    ? { backgroundImage: `url(${getHeaderImageUrl()})` }
+                    : {}),
+                }}
+              >
+                {getHeaderImageUrl() && <div style={styles.coverGradient} />}
+                {/* Always-visible icon buttons centered on cover */}
+                <div style={styles.coverIconRow}>
+                  <button
+                    type="button"
+                    className="edit-icon-btn"
+                    onClick={() => headerInputRef.current?.click()}
+                    style={styles.editIconBtn}
+                    aria-label="Change cover photo"
+                    disabled={saving}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                  </button>
+                  {(getHeaderImageUrl()) && (
+                    <button
+                      type="button"
+                      className="edit-icon-btn"
+                      onClick={() => { setRemoveHeader(true); setHeaderFile(null); }}
+                      style={styles.editIconBtn}
+                      aria-label="Remove cover photo"
+                      disabled={saving}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  )}
+                </div>
+                {!getHeaderImageUrl() && (
+                  <div style={styles.coverPlaceholder}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                    <span>Add cover photo</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Editable avatar */}
+            <div style={styles.editAvatarSection}>
+              <div
+                style={{
+                  ...styles.avatar,
+                  ...(getPfpImageUrl()
+                    ? { backgroundImage: `url(${getPfpImageUrl()})` }
+                    : {}),
+                  position: 'relative',
+                  cursor: 'pointer',
+                }}
+                onClick={() => pfpInputRef.current?.click()}
+              >
+                {!getPfpImageUrl() && (
+                  <span style={styles.avatarIcon}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                  </span>
+                )}
+                {/* Camera badge */}
+                <div style={styles.avatarCameraBadge}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                </div>
+              </div>
+              {getPfpImageUrl() && (
+                <button
+                  type="button"
+                  onClick={() => { setRemovePfp(true); setPfpFile(null); }}
+                  style={styles.avatarRemoveLink}
+                  disabled={saving}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+
+            {/* Edit form fields */}
+            <div style={styles.editFormSection}>
+              {/* Display Name */}
+              <div style={styles.editFieldGroup}>
+                <label style={styles.editFieldLabel}>Display Name</label>
+                <input
+                  type="text"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  placeholder="Your display name"
+                  maxLength={100}
+                  style={styles.editFieldInput}
+                  disabled={saving}
+                />
+              </div>
+
+              {/* Handle */}
+              <div style={styles.editFieldGroup}>
+                <label style={styles.editFieldLabel}>Handle</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)',
+                    color: 'rgba(255,255,255,0.35)', fontSize: '14px', fontFamily: "'Poppins', sans-serif",
+                    pointerEvents: 'none',
+                  }}>@</span>
+                  <input
+                    type="text"
+                    value={editHandle}
+                    onChange={(e) => setEditHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+                    placeholder="username"
+                    maxLength={30}
+                    style={{ ...styles.editFieldInput, paddingLeft: '28px' }}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+
+              {/* Bio */}
+              <div style={styles.editFieldGroup}>
+                <label style={styles.editFieldLabel}>Bio</label>
+                <textarea
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  placeholder="Tell us about yourself..."
+                  rows={3}
+                  style={styles.editFieldTextarea}
+                  disabled={saving}
+                />
+              </div>
+
+              {/* Role toggle pills */}
+              <div style={styles.editFieldGroup}>
+                <label style={styles.editFieldLabel}>Role</label>
+                <div style={styles.editRoleRow}>
+                  <button
+                    type="button"
+                    className="role-pill-btn"
+                    onClick={() => setEditIsListener(!editIsListener)}
+                    style={{
+                      ...styles.rolePillBtn,
+                      ...(editIsListener ? styles.rolePillBtnActive : {}),
+                    }}
+                    disabled={saving}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg>
+                    Listener
+                  </button>
+                  <button
+                    type="button"
+                    className="role-pill-btn"
+                    onClick={() => setEditIsCreator(!editIsCreator)}
+                    style={{
+                      ...styles.rolePillBtn,
+                      ...(editIsCreator ? styles.rolePillBtnActive : {}),
+                    }}
+                    disabled={saving}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                    Creator
+                  </button>
+                </div>
+              </div>
+
+              {saveError && <p style={styles.saveError}>{saveError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top bar */}
       <header style={styles.topBar}>
@@ -369,7 +594,7 @@ const ProfilePage = () => {
         <div style={styles.topBarRight} />
       </header>
 
-      {/* Cover — full width edge to edge */}
+      {/* Cover */}
       <div style={styles.coverWrap}>
         <div
           style={{
@@ -379,10 +604,11 @@ const ProfilePage = () => {
               : {}),
           }}
         >
+          {getHeaderImageUrl() && <div style={styles.coverGradient} />}
           {!getHeaderImageUrl() && (
             <div style={styles.coverPlaceholder}>
-              <span style={styles.coverPlaceholderIcon}>🖼</span>
-              <span>Header image</span>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+              <span>No cover photo</span>
             </div>
           )}
         </div>
@@ -399,13 +625,17 @@ const ProfilePage = () => {
                 : {}),
             }}
           >
-            {!getPfpImageUrl() && <span style={styles.avatarIcon}>👤</span>}
+            {!getPfpImageUrl() && (
+              <span style={styles.avatarIcon}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              </span>
+            )}
           </div>
 
           <div style={styles.nameRow}>
             <div style={styles.nameAndEdit}>
-              <h1 style={styles.displayName}>{user?.username}</h1>
-              {!editing && (
+              <h1 style={styles.displayName}>{user?.display_name || user?.username}</h1>
+              {isOwnProfile && (
                 <button type="button" onClick={startEditing} style={styles.editBtn}>
                   Edit profile
                 </button>
@@ -416,147 +646,27 @@ const ProfilePage = () => {
 
           <div style={styles.rolePill}>{roleLabel}</div>
 
-          {editing ? (
-            <div style={styles.editBlock}>
-              <div style={styles.editCard}>
-                <h4 style={{ ...styles.editCardTitle, ...styles.editCardTitleFirst }}>Role</h4>
-                <div style={styles.roleCheckboxRow}>
-                  <label style={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={editIsListener}
-                      onChange={(e) => setEditIsListener(e.target.checked)}
-                      disabled={saving}
-                      style={styles.checkbox}
-                    />
-                    <span>Listener</span>
-                  </label>
-                  <label style={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={editIsCreator}
-                      onChange={(e) => setEditIsCreator(e.target.checked)}
-                      disabled={saving}
-                      style={styles.checkbox}
-                    />
-                    <span>Creator</span>
-                  </label>
-                </div>
+          {user?.bio?.trim() ? (
+            <p style={styles.bio}>{user.bio}</p>
+          ) : null}
 
-                <h4 style={styles.editCardTitle}>Bio</h4>
-                <textarea
-                  value={editBio}
-                  onChange={(e) => setEditBio(e.target.value)}
-                  placeholder="Tell us about yourself..."
-                  rows={4}
-                  style={styles.bioInput}
-                  disabled={saving}
-                />
-
-                <h4 style={styles.editCardTitle}>Cover photo</h4>
-                <div style={styles.uploadRow}>
-                  <input
-                    ref={headerInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setHeaderFile(f);
-                      setRemoveHeader(false);
-                      e.target.value = '';
-                    }}
-                    style={styles.hiddenFileInput}
-                    disabled={saving}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => headerInputRef.current?.click()}
-                    className="profile-upload-card"
-                    style={styles.uploadCard}
-                    disabled={saving}
-                  >
-                    <span style={styles.uploadIcon}>↑</span>
-                    <span style={styles.uploadText}>{headerFile ? headerFile.name : 'Upload cover'}</span>
-                  </button>
-                  {(user?.header_image || headerFile) && (
-                    <button
-                      type="button"
-                      onClick={() => { setRemoveHeader(true); setHeaderFile(null); }}
-                      style={styles.removeBtn}
-                      disabled={saving}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-
-                <h4 style={styles.editCardTitle}>Profile picture</h4>
-                <div style={styles.uploadRow}>
-                  <input
-                    ref={pfpInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setPfpFile(f);
-                      setRemovePfp(false);
-                      e.target.value = '';
-                    }}
-                    style={styles.hiddenFileInput}
-                    disabled={saving}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => pfpInputRef.current?.click()}
-                    className="profile-upload-card"
-                    style={styles.uploadCard}
-                    disabled={saving}
-                  >
-                    <span style={styles.uploadIcon}>↑</span>
-                    <span style={styles.uploadText}>{pfpFile ? pfpFile.name : 'Upload photo'}</span>
-                  </button>
-                  {(user?.profile_picture || pfpFile) && (
-                    <button
-                      type="button"
-                      onClick={() => { setRemovePfp(true); setPfpFile(null); }}
-                      style={styles.removeBtn}
-                      disabled={saving}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-
-                {saveError && <p style={styles.saveError}>{saveError}</p>}
-                <div style={styles.editActions}>
-                  <button type="button" onClick={cancelEditing} style={styles.cancelBtn} disabled={saving}>
-                    Cancel
-                  </button>
-                  <button type="button" onClick={saveProfile} style={styles.saveBtn} disabled={saving}>
-                    {saving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              </div>
+          {isOwnProfile && (
+            <div style={styles.actions}>
+              <button
+                type="button"
+                onClick={() => {
+                  stop();
+                  localStorage.removeItem('accessToken');
+                  localStorage.removeItem('refreshToken');
+                  localStorage.removeItem('username');
+                  navigate('/login');
+                }}
+                style={styles.logoutBtn}
+              >
+                Log out
+              </button>
             </div>
-          ) : (
-            user?.bio?.trim() ? (
-              <p style={styles.bio}>{user.bio}</p>
-            ) : null
           )}
-
-          <div style={styles.actions}>
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                navigate('/login');
-              }}
-              style={styles.logoutBtn}
-            >
-              Log out
-            </button>
-          </div>
         </div>
 
         {/* Tabs */}
@@ -580,72 +690,41 @@ const ProfilePage = () => {
         <div style={styles.tabContent}>
           {activeTab === 'Tracks' ? (
             <div>
-              {/* Upload section */}
-              <div style={styles.trackUploadSection}>
-                <h3 style={styles.trackSectionTitle}>Upload a track</h3>
-                <div style={styles.trackUploadForm}>
-                  <input
-                    ref={trackInputRef}
-                    type="file"
-                    accept="audio/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        setTrackFile(f);
-                        if (!trackTitle) setTrackTitle(f.name.replace(/\.[^/.]+$/, ''));
-                      }
-                      e.target.value = '';
-                    }}
-                    style={styles.hiddenFileInput}
-                    disabled={uploading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => trackInputRef.current?.click()}
-                    className="profile-upload-card"
-                    style={styles.uploadCard}
-                    disabled={uploading}
-                  >
-                    <span style={styles.uploadIcon}>♫</span>
-                    <span style={styles.uploadText}>{trackFile ? trackFile.name : 'Choose audio file'}</span>
-                  </button>
-                  {trackFile && (
-                    <div style={styles.trackTitleRow}>
-                      <input
-                        type="text"
-                        value={trackTitle}
-                        onChange={(e) => setTrackTitle(e.target.value)}
-                        placeholder="Track title"
-                        style={styles.trackTitleInput}
-                        disabled={uploading}
-                      />
-                      <button
-                        type="button"
-                        onClick={uploadTrack}
-                        style={styles.trackUploadBtn}
-                        disabled={uploading}
-                      >
-                        {uploading ? 'Uploading...' : 'Upload'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setTrackFile(null); setTrackTitle(''); setUploadError(''); }}
-                        style={styles.trackCancelBtn}
-                        disabled={uploading}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                  {uploadError && <p style={styles.saveError}>{uploadError}</p>}
+              {isOwnProfile && (
+                <div style={styles.trackUploadSection}>
+                  <h3 style={styles.trackSectionTitle}>Upload a track</h3>
+                  <div style={styles.trackUploadForm}>
+                    <input
+                      ref={trackInputRef}
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          setTrackFile(f);
+                          setModalMode('upload_track');
+                        }
+                        e.target.value = '';
+                      }}
+                      style={styles.hiddenFileInput}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => trackInputRef.current?.click()}
+                      className="profile-upload-card"
+                      style={styles.uploadCard}
+                    >
+                      <span style={styles.uploadIcon}>♫</span>
+                      <span style={styles.uploadText}>{'Choose audio file'}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Track list */}
               {tracksLoading ? (
                 <p style={styles.comingSoon}>Loading tracks...</p>
               ) : tracks.length === 0 ? (
-                <p style={styles.comingSoon}>No tracks uploaded yet</p>
+                <p style={styles.comingSoon}>{isOwnProfile ? 'No tracks uploaded yet' : 'No tracks yet'}</p>
               ) : (
                 <div style={styles.trackList}>
                   {tracks.map((track) => (
@@ -654,9 +733,9 @@ const ProfilePage = () => {
                         type="button"
                         onClick={() => togglePlay(track)}
                         style={styles.playBtn}
-                        aria-label={playingTrackId === track.id ? 'Pause' : 'Play'}
+                        aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
                       >
-                        {playingTrackId === track.id ? '⏸' : '▶'}
+                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? '⏸' : '▶'}
                       </button>
                       <div style={styles.trackInfo}>
                         <span style={styles.trackTitle}>{track.title}</span>
@@ -664,61 +743,32 @@ const ProfilePage = () => {
                           {new Date(track.uploaded_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => deleteTrack(track.id)}
-                        style={styles.trackDeleteBtn}
-                        disabled={deletingTrackId === track.id}
-                      >
-                        {deletingTrackId === track.id ? '...' : '✕'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : activeTab === 'Posts' ? (
-            <div>
-              {pubsLoading ? (
-                <p style={styles.comingSoon}>Loading published songs...</p>
-              ) : publications.length === 0 ? (
-                <p style={styles.comingSoon}>No published songs yet. Use the DAW to create and publish!</p>
-              ) : (
-                <div style={styles.trackList}>
-                  {publications.map((pub) => (
-                    <div key={pub.id} style={styles.trackCard}>
-                      <button
-                        type="button"
-                        onClick={() => togglePlayPub(pub)}
-                        style={styles.playBtn}
-                        aria-label={playingPubId === pub.id ? 'Pause' : 'Play'}
-                      >
-                        {playingPubId === pub.id ? '⏸' : '▶'}
-                      </button>
-                      <div style={styles.trackInfo}>
-                        <span style={styles.trackTitle}>{pub.title}</span>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <span style={styles.trackDate}>
-                            {new Date(pub.published_at).toLocaleDateString()}
-                          </span>
-                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
-                            ▶ {pub.play_count} plays
-                          </span>
+                      {isOwnProfile && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditTargetId(track.id);
+                              setEditInitialTitle(track.title);
+                              setEditInitialCover(track.cover_image || null);
+                              setModalMode('edit_track');
+                            }}
+                            style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
+                            title="Edit metadata"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteTrack(track.id)}
+                            style={styles.trackDeleteBtn}
+                            disabled={deletingTrackId === track.id}
+                            title="Delete track"
+                          >
+                            {deletingTrackId === track.id ? '...' : '✕'}
+                          </button>
                         </div>
-                        {pub.description && (
-                          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                            {pub.description}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => deletePublication(pub.id)}
-                        style={styles.trackDeleteBtn}
-                        disabled={deletingPubId === pub.id}
-                      >
-                        {deletingPubId === pub.id ? '...' : '✕'}
-                      </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -729,6 +779,54 @@ const ProfilePage = () => {
           )}
         </div>
       </div>
+
+      {/* Image crop modal */}
+      {cropTarget && cropImageSrc && (
+        <ImageCropModal
+          imageSrc={cropImageSrc}
+          aspect={cropTarget === 'pfp' ? 1 : 16 / 9}
+          cropShape={cropTarget === 'pfp' ? 'round' : 'rect'}
+          onCropComplete={(blob) => {
+            const ext = blob.type === 'image/png' ? '.png' : '.jpg';
+            const fileName = cropTarget === 'pfp' ? `profile${ext}` : `header${ext}`;
+            const file = new File([blob], fileName, { type: blob.type });
+            if (cropTarget === 'pfp') {
+              setPfpFile(file);
+              setRemovePfp(false);
+            } else {
+              setHeaderFile(file);
+              setRemoveHeader(false);
+            }
+            URL.revokeObjectURL(cropImageSrc);
+            setCropImageSrc(null);
+            setCropTarget(null);
+          }}
+          onCancel={() => {
+            if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+            setCropImageSrc(null);
+            setCropTarget(null);
+          }}
+        />
+      )}
+
+      {/* Track edit/upload modal */}
+      {modalMode && (
+        <TrackEditModal
+          isOpen={!!modalMode}
+          onClose={() => {
+            setModalMode(null);
+            setTrackFile(null);
+          }}
+          mode={modalMode}
+          initialFile={trackFile}
+          editId={editTargetId}
+          initialTitle={editInitialTitle}
+          initialCoverUrl={editInitialCover}
+          onSuccess={() => {
+            fetchTracks();
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -841,14 +939,241 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cover: {
     width: '100%',
-    height: '230px',
-    background: 'rgba(30, 45, 80, 0.6)',
+    height: '260px',
+    background: 'linear-gradient(135deg, rgba(20, 30, 60, 0.9) 0%, rgba(30, 50, 90, 0.7) 50%, rgba(0, 80, 120, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     borderBottom: '1px solid rgba(100, 150, 200, 0.3)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  coverGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(180deg, transparent 40%, rgba(10, 10, 26, 0.7) 100%)',
+    pointerEvents: 'none',
+  },
+  /* ── Edit modal styles ── */
+  editBackdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    background: 'rgba(0, 0, 0, 0.7)',
+    backdropFilter: 'blur(6px)',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: '40px 16px',
+    overflowY: 'auto',
+  },
+  editModal: {
+    width: '100%',
+    maxWidth: '600px',
+    borderRadius: '20px',
+    background: '#0f0f23',
+    border: '1px solid rgba(100, 150, 200, 0.2)',
+    boxShadow: '0 24px 80px rgba(0, 0, 0, 0.6)',
+    overflow: 'hidden',
+    animation: 'fadeIn 0.2s ease',
+  },
+  editTopBar: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: '53px',
+    padding: '0 16px',
+    background: 'rgba(10, 10, 26, 0.95)',
+    backdropFilter: 'blur(12px)',
+    borderBottom: '1px solid rgba(100, 150, 200, 0.15)',
+  },
+  editCloseBtn: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'transparent',
+    color: '#ffffff',
+    fontSize: '18px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  editTopBarTitle: {
+    fontSize: '19px',
+    fontWeight: 700,
+    color: '#ffffff',
+    position: 'absolute',
+    left: '50%',
+    transform: 'translateX(-50%)',
+  },
+  editSaveBtn: {
+    padding: '8px 20px',
+    borderRadius: '9999px',
+    border: 'none',
+    background: '#ffffff',
+    color: '#000000',
+    fontSize: '14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  coverIconRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    zIndex: 3,
+    position: 'relative',
+  },
+  editIconBtn: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'rgba(0, 0, 0, 0.55)',
+    color: '#ffffff',
+    fontSize: '20px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(4px)',
+    transition: 'background 0.2s, transform 0.2s',
+  },
+  editCover: {
+    width: '100%',
+    height: '200px',
+    background: 'linear-gradient(135deg, rgba(20, 30, 60, 0.9) 0%, rgba(30, 50, 90, 0.7) 50%, rgba(0, 80, 120, 0.6) 100%)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  editAvatarSection: {
+    padding: '0 24px',
+    marginTop: '-50px',
+    position: 'relative',
+    zIndex: 2,
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '16px',
+    marginBottom: '24px',
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: '4px',
+    left: '4px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    background: 'rgba(0, 0, 0, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    border: '2px solid #0a0a1a',
+    backdropFilter: 'blur(4px)',
+  },
+  avatarRemoveLink: {
+    background: 'none',
+    border: 'none',
+    color: '#ff6b6b',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+    padding: '4px 0',
+    marginBottom: '8px',
+  },
+  editFormSection: {
+    padding: '0 24px 40px',
+    maxWidth: '600px',
+  },
+  editFieldGroup: {
+    marginBottom: '20px',
+  },
+  editFieldLabel: {
+    display: 'block',
+    fontSize: '13px',
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: '6px',
+    fontWeight: 500,
+  },
+  editFieldReadonly: {
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: '4px',
+    border: '1px solid rgba(100, 150, 200, 0.25)',
+    background: 'transparent',
+    color: '#ffffff',
+    fontSize: '16px',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  editFieldInput: {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    padding: '14px 16px',
+    borderRadius: '4px',
+    border: '1px solid rgba(100, 150, 200, 0.25)',
+    background: 'transparent',
+    color: '#ffffff',
+    fontSize: '16px',
+    fontFamily: "'Poppins', sans-serif",
+    outline: 'none',
+  },
+  editFieldTextarea: {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '14px 16px',
+    borderRadius: '4px',
+    border: '1px solid rgba(100, 150, 200, 0.25)',
+    background: 'transparent',
+    color: '#ffffff',
+    fontSize: '16px',
+    fontFamily: "'Poppins', sans-serif",
+    resize: 'vertical',
+    minHeight: '80px',
+  },
+  editRoleRow: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  rolePillBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    borderRadius: '9999px',
+    border: '2px solid rgba(100, 150, 200, 0.25)',
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  rolePillBtnActive: {
+    borderColor: '#00d4ff',
+    background: 'rgba(0, 212, 255, 0.12)',
+    color: '#00d4ff',
+    boxShadow: '0 0 20px rgba(0, 212, 255, 0.2), inset 0 0 20px rgba(0, 212, 255, 0.05)',
   },
   main: {
     maxWidth: '1280px',

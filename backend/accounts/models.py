@@ -4,7 +4,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
-from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
 
 def validate_image_size(file):
@@ -45,6 +44,7 @@ class User(AbstractUser):
         validators=[validate_image_size]
     )
     bio = models.TextField(blank=True, default='')
+    display_name = models.CharField(max_length=100, blank=True, default='')
 
     @property
     def role(self):
@@ -69,9 +69,16 @@ class Track(models.Model):
     audio_file = models.FileField(
         upload_to='tracks/',
         validators=[validate_audio_size],
-        storage=RawMediaCloudinaryStorage()
+    )
+    cover_image = models.ImageField(
+        upload_to='tracks/covers/',
+        blank=True,
+        null=True,
+        validators=[validate_image_size]
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    play_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-uploaded_at']
@@ -118,7 +125,6 @@ class Publication(models.Model):
     audio_file = models.FileField(
         upload_to='publications/',
         validators=[validate_audio_size],
-        storage=RawMediaCloudinaryStorage()
     )
     cover_image = models.ImageField(
         upload_to='publications/covers/',
@@ -128,6 +134,7 @@ class Publication(models.Model):
     )
     is_public = models.BooleanField(default=True)
     play_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
     published_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -135,6 +142,50 @@ class Publication(models.Model):
 
     def __str__(self):
         return f"{self.title} — {self.user.username}"
+
+
+class Like(models.Model):
+    """A user liking a publication — used to build personal libraries."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='likes',
+    )
+    publication = models.ForeignKey(
+        Publication,
+        on_delete=models.CASCADE,
+        related_name='likes',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'publication')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} ♡ {self.publication.title}"
+
+
+class TrackLike(models.Model):
+    """A user liking a track — used to build personal libraries."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='track_likes',
+    )
+    track = models.ForeignKey(
+        Track,
+        on_delete=models.CASCADE,
+        related_name='track_likes',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'track')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} ♡ {self.track.title}"
 
 
 # ============ Cleanup signals - delete files from Cloudinary ============
@@ -150,9 +201,11 @@ def delete_user_files(sender, instance, **kwargs):
 
 @receiver(pre_delete, sender=Track)
 def delete_track_file(sender, instance, **kwargs):
-    """Delete audio file from Cloudinary when track is deleted"""
+    """Delete audio file and cover image from Cloudinary when track is deleted"""
     if instance.audio_file:
         instance.audio_file.delete(save=False)
+    if instance.cover_image:
+        instance.cover_image.delete(save=False)
 
 
 @receiver(pre_delete, sender=Publication)
@@ -186,7 +239,7 @@ def delete_old_user_files(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=Track)
 def delete_old_track_file(sender, instance, **kwargs):
-    """Delete old audio file when track is updated with new file"""
+    """Delete old audio file and cover image when track is updated with new files"""
     if not instance.pk:
         return
     
@@ -197,3 +250,6 @@ def delete_old_track_file(sender, instance, **kwargs):
     
     if old_instance.audio_file and old_instance.audio_file != instance.audio_file:
         old_instance.audio_file.delete(save=False)
+
+    if old_instance.cover_image and old_instance.cover_image != instance.cover_image:
+        old_instance.cover_image.delete(save=False)

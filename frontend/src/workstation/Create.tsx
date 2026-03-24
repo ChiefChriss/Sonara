@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiFetch } from '../utils/api';
+import { listProjects } from './api/ProjectApi';
 import sonaraLogo from '../assets/sonara_logo.svg';
 import waveLeft from '../assets/wave-left.svg';
 import waveRight from '../assets/wave-right.svg';
+import { usePlayerStore } from '../stores/playerStore';
 
 interface Project {
   id: number;
   name: string;
-  created_at: string;
   updated_at: string;
 }
 
@@ -16,18 +16,38 @@ const ArtistHome = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState('');
 
   useEffect(() => {
     document.title = 'Artist Home | Sonara';
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      navigate('/login');
+      return;
+    }
 
-    // Fetch user's projects
-    const fetchProjects = async () => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
+    const fetchProfile = async () => {
       try {
-        const response = await apiFetch('/api/auth/projects/');
+        const response = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
         if (response.ok) {
           const data = await response.json();
-          setProjects(data);
+          setUsername(data.username);
         }
+      } catch { /* profile link will fall back to /profile */ }
+    };
+
+    const fetchProjects = async () => {
+      try {
+        const data = await listProjects();
+        setProjects(data.map((p) => ({
+          id: p.id,
+          name: p.name,
+          updated_at: p.updated_at,
+        })));
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -35,40 +55,15 @@ const ArtistHome = () => {
       }
     };
 
+    fetchProfile();
     fetchProjects();
   }, [navigate]);
 
-  const handleDeleteProject = async (projectId: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm('Delete this project? This cannot be undone.')) return;
-    try {
-      await apiFetch(`/api/auth/projects/${projectId}/`, {
-        method: 'DELETE',
-      });
-      setProjects((prev) => prev.filter((p) => p.id !== projectId));
-    } catch (err) {
-      console.error('Delete failed:', err);
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   const handleLogout = () => {
+    usePlayerStore.getState().stop();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('username');
     navigate('/login');
   };
 
@@ -85,7 +80,7 @@ const ArtistHome = () => {
       <div style={styles.header}>
         <Link to="/home" style={styles.navLink}>Back to Home</Link>
         <div style={styles.headerRight}>
-          <Link to="/profile" style={styles.navLink}>Profile</Link>
+          <Link to={username ? `/@${username}` : '/profile'} style={styles.navLink}>Profile</Link>
           <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
         </div>
       </div>
@@ -102,7 +97,7 @@ const ArtistHome = () => {
         {/* My Projects Section */}
         <div style={styles.projectsSection}>
           <h2 style={styles.sectionTitle}>My Projects</h2>
-          
+
           <div style={styles.projectsList}>
             {loading ? (
               <p style={styles.emptyText}>Loading projects...</p>
@@ -110,25 +105,16 @@ const ArtistHome = () => {
               <p style={styles.emptyText}>No saved projects yet. Create your first track!</p>
             ) : (
               projects.map((project) => (
-                <Link 
-                  key={project.id} 
-                  to={`/workstation/${project.id}`} 
+                <Link
+                  key={project.id}
+                  to={`/workstation/${project.id}`}
                   style={styles.projectCard}
                 >
                   <div style={styles.projectInfo}>
                     <span style={styles.projectTitle}>{project.name}</span>
-                    <span style={styles.projectDate}>Last saved {formatDate(project.updated_at)}</span>
+                    <span style={styles.projectDate}>{new Date(project.updated_at).toLocaleDateString()}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button
-                      onClick={(e) => handleDeleteProject(project.id, e)}
-                      style={styles.deleteButton}
-                      title="Delete project"
-                    >
-                      ✕
-                    </button>
-                    <span style={styles.projectArrow}>→</span>
-                  </div>
+                  <span style={styles.projectArrow}>→</span>
                 </Link>
               ))
             )}
@@ -295,7 +281,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '4px',
   },
-    projectTitle: {
+  projectTitle: {
     fontSize: '16px',
     fontWeight: 600,
     color: '#ffffff',
@@ -303,7 +289,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     maxWidth: '400px',
-    },
+  },
   projectDate: {
     fontSize: '12px',
     color: 'rgba(255, 255, 255, 0.5)',
@@ -311,17 +297,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   projectArrow: {
     fontSize: '20px',
     color: '#00d4ff',
-  },
-  deleteButton: {
-    background: 'none',
-    border: '1px solid rgba(255,100,100,0.3)',
-    borderRadius: '6px',
-    color: 'rgba(255,100,100,0.6)',
-    cursor: 'pointer',
-    fontSize: '12px',
-    padding: '4px 8px',
-    fontFamily: "'Poppins', sans-serif",
-    transition: 'all 0.2s',
   },
   emptyText: {
     color: 'rgba(255, 255, 255, 0.5)',

@@ -1,0 +1,754 @@
+Profile Route Change: /profile → /@username
+=============================================
+
+Summary
+-------
+Updated the profile page routing so the browser URL displays the user's
+handle (e.g. /@easton) instead of the generic /profile path.
+
+
+Files Changed
+-------------
+
+1. frontend/src/app.tsx
+   - Added new route: /@:username → ProfilePage
+   - Changed /profile route to render ProfileRedirect (auto-redirects to /@username)
+   - Moved the * catch-all route to the bottom so it doesn't intercept /@:username
+
+2. frontend/src/ProfileRedirect.tsx  (NEW)
+   - Small component that handles /profile requests
+   - Fetches the current user's username from GET /api/auth/profile/
+   - Redirects to /@{username}
+   - If not logged in, redirects to /login
+
+3. frontend/src/ProfilePage.tsx
+   - Added useParams to read the :username param from the URL
+   - If the URL username doesn't match the logged-in user, corrects the URL
+     with a replace redirect to /@{actualUsername}
+
+4. frontend/src/ListenerHome.tsx
+   - Profile nav link now points to /@{username} when username is available
+   - Falls back to /profile (which triggers the redirect) if username hasn't loaded
+
+5. frontend/src/workstation/Create.tsx
+   - Added username state + profile fetch so the component knows the current user
+   - Profile nav link now points to /@{username}, falling back to /profile
+
+
+How It Works
+------------
+- User navigates to their profile → URL shows /@theirusername
+- Old /profile links still work — they auto-redirect to /@username
+- Navigation links across the app (Home, Create pages) link directly to /@username
+- If someone manually types a wrong username in the URL, it corrects to the
+  logged-in user's actual handle
+
+
+Profile Route Fix: /@username 404 Bug
+======================================
+
+Summary
+-------
+The /@username route was showing a 404 page because React Router doesn't
+support literal @ characters in path patterns. Fixed by using a /:handle
+dynamic segment and validating the @ prefix inside the component.
+
+
+Files Changed
+-------------
+
+1. frontend/src/app.tsx
+   - Changed route from /@:username to /:handle
+   - Moved /:handle route just above the * catch-all
+   - Static routes (/home, /login, etc.) still match first due to React Router scoring
+
+2. frontend/src/ProfilePage.tsx
+   - Reads the :handle param instead of :username
+   - Strips the @ prefix to extract the actual username
+   - If handle doesn't start with @, renders NotFound component
+   - Added early guard in useEffect to skip fetch for non-@ handles
+
+
+Track Search Feature
+====================
+
+Summary
+-------
+Made uploaded tracks searchable by all users. Added a public backend search
+endpoint and wired up the previously non-functional search bar on the home page.
+
+
+Backend Changes
+---------------
+
+1. backend/accounts/serializers.py
+   - Added PublicTrackSerializer: exposes track id, title, audio_file,
+     uploaded_at, plus the uploader's username and profile_picture
+
+2. backend/accounts/views.py
+   - Added TrackSearchView (GET /api/auth/search/tracks/?q=...)
+   - Public endpoint, no auth required
+   - Searches by track title OR uploader username (case-insensitive)
+   - Returns up to 50 results, uses select_related for efficiency
+
+3. backend/accounts/urls.py
+   - Registered new URL: search/tracks/ → TrackSearchView
+
+
+Frontend Changes
+----------------
+
+4. frontend/src/ListenerHome.tsx
+   - Search bar is now fully functional:
+     * Debounced input (300ms) to avoid excessive API calls
+     * Dropdown results panel with track title, @username, profile picture
+     * Inline play/pause button on each result to preview tracks
+     * Clicking @username navigates to that user's profile (/@username)
+     * Click-outside-to-close behavior on the dropdown
+   - Added state: searchQuery, searchResults, searchOpen, searching, playingId
+   - Added refs: audioRef, searchTimerRef, searchWrapRef
+
+
+API Endpoint
+------------
+GET /api/auth/search/tracks/?q=<query>
+
+Response: Array of {
+  id, title, audio_file, uploaded_at, username, profile_picture
+}
+
+
+Local Storage for Dev
+=====================
+
+Summary
+-------
+Track uploads were failing with 500 errors because Cloudinary credentials
+were not configured locally. Switched to local file storage for dev mode.
+
+
+Files Changed
+-------------
+
+1. backend/sonara_backend/settings.py
+   - STORAGES now branches on ENV: dev uses FileSystemStorage, production
+     uses MediaCloudinaryStorage
+   - DEBUG is now dynamic: True in dev, False in production
+
+2. backend/accounts/models.py
+   - Removed explicit storage=RawMediaCloudinaryStorage() from Track.audio_file
+     and Publication.audio_file so they use the default storage backend
+   - Removed unused RawMediaCloudinaryStorage import
+
+3. Migration: accounts/0007_alter_track_audio_file_...
+
+
+Unified Search (Tracks + Publications)
+=======================================
+
+Summary
+-------
+Replaced the tracks-only search with a unified endpoint that searches both
+tracks and publications (posts). Added word-level matching so partial queries
+like "u could" match "U could tell".
+
+
+Backend Changes
+---------------
+
+1. backend/accounts/views.py
+   - Replaced TrackSearchView with SearchView (APIView)
+   - New endpoint: GET /api/auth/search/?q=...
+   - Splits query into words, matches each word independently against
+     title, username, and description (case-insensitive)
+   - Returns { users, tracks, publications } (users added later, see below)
+
+2. backend/accounts/urls.py
+   - Changed URL from search/tracks/ to search/
+
+
+Frontend Changes
+----------------
+
+3. frontend/src/ListenerHome.tsx
+   - Updated to hit unified /api/auth/search/ endpoint
+   - Results show both tracks and publications with a "Track" or "Post" tag
+   - Publications listed first, then tracks
+
+
+Public User Profiles + User Search
+===================================
+
+Summary
+-------
+Users can now look up other users via the search bar or by navigating
+directly to /@username. Viewing another user's profile shows a read-only
+view with their info and tracks.
+
+
+Backend Changes
+---------------
+
+1. backend/accounts/serializers.py
+   - Added PublicProfileSerializer: exposes id, username, role, is_listener,
+     is_creator, header_image, profile_picture, bio (no email/password)
+
+2. backend/accounts/views.py
+   - Added PublicUserProfileView: GET /api/auth/users/<username>/
+     Returns public profile data + user's tracks. No auth required.
+     Returns 404 if user doesn't exist.
+   - Updated SearchView to also search users by username and bio
+     Response now includes { users, tracks, publications }
+
+3. backend/accounts/urls.py
+   - Added: users/<str:username>/ → PublicUserProfileView
+
+
+Frontend Changes
+----------------
+
+4. frontend/src/ProfilePage.tsx
+   - Added isOwnProfile state to detect own vs. other user
+   - Fetch logic: checks logged-in user first, then either loads own profile
+     (authenticated) or public profile (GET /api/auth/users/<username>/)
+   - Own profile: full edit, upload, delete, logout functionality
+   - Other user: read-only view — no edit button, no upload section,
+     no delete buttons, no logout
+   - Other user's tracks loaded from public endpoint and displayed with
+     play buttons (no delete)
+   - Shows "User not found" error for non-existent usernames
+
+5. frontend/src/ListenerHome.tsx
+   - Search dropdown now shows "People" section with user results
+     (avatar, username, role) above tracks/posts
+   - Clicking a user navigates to /@username
+
+
+Dedicated Search Page
+=====================
+
+Summary
+-------
+Created a full-page search experience at /search?q=... with live results
+that update as you type. Accessible from the home page search bar.
+
+
+Files Changed
+-------------
+
+1. frontend/src/SearchPage.tsx  (NEW)
+   - Full-page search at /search?q=...
+   - Own search bar in sticky header, auto-focused on load
+   - Live debounced results (300ms) as you type — typing "r", "re", "red"
+     progressively narrows results
+   - Three result sections: People, Tracks, Posts
+   - People cards: avatar, @username, role, bio snippet → click to visit profile
+   - Tracks: play button, title, @artist link, upload date
+   - Posts: play button, title, @artist link, description snippet, date, play count
+   - URL query param (?q=) updates as you type for shareable/bookmarkable links
+   - Sonara logo links back to /home
+   - Empty states for no query and no results
+
+2. frontend/src/app.tsx
+   - Added /search route → SearchPage
+   - Placed before /:handle catch-all so it matches correctly
+
+3. frontend/src/ListenerHome.tsx
+   - Pressing Enter in the search bar navigates to /search?q=...
+   - "See all results" link at bottom of dropdown navigates to search page
+
+
+Accent-Insensitive Search
+=========================
+
+Summary
+-------
+Search was too strict — "tell" would not match a track titled "U could tëll"
+because Django's icontains does exact character matching. Added Unicode
+normalization so accented characters (ë, é, ñ, etc.) are treated as their
+plain equivalents (e, e, n) during search.
+
+
+Files Changed
+-------------
+
+1. backend/accounts/views.py
+   - Added _strip_accents(text): uses unicodedata.normalize('NFKD') to
+     decompose characters like ë into e + combining diaeresis, then strips
+     the combining marks. Works for all Unicode diacritics.
+   - Added _fuzzy_match(haystack, needle_words): checks if every search
+     word appears in the accent-stripped version of the target text
+   - Rewrote SearchView to use a two-pass approach:
+     1. Loose DB query using icontains on the first word to narrow candidates
+     2. Python-side accent-insensitive filtering on all words
+   - Examples: "tell" matches "tëll", "cafe" matches "café", "n" matches "ñ"
+
+
+Audio Playback Fix (Relative URLs)
+===================================
+
+Summary
+-------
+Music wasn't playing when pressing play because the API returned relative
+file paths (e.g. /media/tracks/...) instead of absolute URLs. The browser
+resolved them against the Vite dev server (localhost:5173) which doesn't
+serve media files — only Django does.
+
+
+Files Changed
+-------------
+
+1. backend/accounts/views.py
+   - Added context={'request': request} to all serializer calls in
+     PublicUserProfileView and SearchView
+   - DRF uses the request to build absolute URLs for FileField/ImageField
+   - audio_file now returns e.g. http://127.0.0.1:8000/media/tracks/file.mp3
+
+
+Auto Creator Role on Upload
+============================
+
+Summary
+-------
+Users now automatically receive the creator role when they upload a track
+or publish a song, instead of having to manually set it in profile settings.
+
+
+Files Changed
+-------------
+
+1. backend/accounts/views.py
+   - Added perform_create() to TrackListCreateView: sets user.is_creator=True
+     after a track is uploaded (only writes to DB if not already a creator)
+   - Added perform_create() to PublicationListCreateView: same logic for
+     published songs
+
+
+New Project Name Reset
+======================
+
+Summary
+-------
+When navigating to the Create page and starting a new project, the project
+name was carrying over from a previously loaded project instead of resetting.
+
+
+Files Changed
+-------------
+
+1. frontend/src/workstation/Workstation.tsx
+   - Updated the project load useEffect: when there is no projectId in the
+     URL (new project), resets projectName to "Untitled Project" and clears
+     serverProjectId so it doesn't overwrite an existing project on save
+
+
+Image Cropping for Uploads
+==========================
+
+Summary
+-------
+Added interactive image cropping to profile picture and header image uploads.
+When a user selects an image file, a crop modal opens letting them pan, zoom,
+and choose what portion of the image to show before it gets uploaded. Profile
+pictures use a circular 1:1 crop, header images use a 16:9 rectangular crop.
+The cropped result is sent to the backend as a regular file — no backend
+changes needed.
+
+
+Files Changed
+-------------
+
+1. frontend/package.json
+   - Added react-easy-crop dependency
+
+2. frontend/src/utils/cropImage.ts  (NEW)
+   - Canvas-based utility that takes an image URL + crop area coordinates
+   - Draws the cropped region onto an offscreen canvas
+   - Returns a Blob (converted to File for FormData upload)
+
+3. frontend/src/components/ImageCropModal.tsx  (NEW)
+   - Reusable full-screen modal using react-easy-crop
+   - Supports configurable aspect ratio and crop shape (round or rect)
+   - Zoom slider for fine-tuning
+   - Dark glassmorphism overlay matching Sonara's design language
+   - Props: imageSrc, aspect, cropShape, onCropComplete, onCancel
+
+4. frontend/src/ProfilePage.tsx
+   - Added import for ImageCropModal
+   - Added state: cropTarget ('header' | 'pfp' | null), cropImageSrc
+   - On file input change: opens crop modal instead of directly setting file
+   - On crop complete: converts Blob to File and sets into existing state
+   - Existing saveProfile flow sends pre-cropped File via FormData unchanged
+
+
+Edit Profile UI Redesign
+========================
+
+Summary
+-------
+Redesigned the edit profile experience to match a modern Twitter/X-style
+layout with three major improvements:
+
+1. Edit mode is now a centered popup modal with blurred backdrop overlay
+   (instead of inline editing on the profile page)
+2. All emoji icons replaced with clean inline SVG icons (camera, close/X,
+   image placeholder, user silhouette, headphones, music note)
+3. Listener/Creator role selection changed from checkboxes to toggle pill
+   labels that glow cyan (#00d4ff) when active
+
+
+Files Changed
+-------------
+
+1. frontend/src/ProfilePage.tsx
+   - Edit mode renders as a fixed-position popup modal with backdrop blur
+   - Modal has: top bar (× close, "Edit profile" title, Save button),
+     editable cover photo with circular SVG icon buttons (camera + ×),
+     editable avatar with camera badge, and clean bordered form fields
+   - Cover photo: improved from 230px to 260px, richer gradient background,
+     bottom gradient overlay for visual depth
+   - Normal view: emoji placeholders replaced with SVG icons for cover
+     placeholder (image icon) and avatar placeholder (user icon)
+   - Role selection: Listener pill has headphones SVG, Creator pill has
+     music note SVG. When active: cyan border, cyan glow shadow, cyan text.
+     Smooth CSS transitions on toggle.
+   - Clicking backdrop closes modal (same as cancel)
+   - Modal has fade-in animation
+
+
+Workstation New Project State Reset
+====================================
+
+Summary
+-------
+When navigating to the Create page (/workstation) and clicking "Create New
+Track", the DAW was still showing tracks and project names from the previous
+session. This happened because the zustand store only reset the project name
+and server ID, but not the actual tracks or editing state.
+
+Root Cause
+----------
+In Workstation.tsx, the useEffect that runs when there is no projectId only
+called setProjectName() and setServerProjectId(). The tracks array, undo/redo
+history, piano roll state, and clip selection all persisted from whatever was
+loaded before.
+
+Fix
+---
+Now calls loadProjectData() with a clean default state:
+  - projectName: '[Untitled]'
+  - bpm: 120, key: C, time signature: 4/4
+  - tracks: [] (empty — no preloaded demo tracks)
+  - Editing state (selected clips, piano roll, undo/redo) all cleared
+
+Files Changed
+-------------
+
+1. frontend/src/workstation/Workstation.tsx
+   - Replaced the else branch of the project load useEffect (lines 106-113)
+   - Now calls loadProjectData() with empty defaults instead of just
+     setting projectName and serverProjectId
+
+
+Create Page: Projects vs Uploaded Tracks
+=========================================
+
+Summary
+-------
+The "My Projects" section on the Create page was showing uploaded tracks
+(from the profile page) instead of actual DAW workstation projects. This
+happened because it fetched from /api/auth/tracks/ which returns all audio
+tracks, when it should have been fetching from /api/auth/projects/ which
+returns only saved DAW sessions.
+
+Files Changed
+-------------
+
+1. frontend/src/workstation/Create.tsx
+   - Import: added listProjects() from ProjectApi.ts
+   - Removed direct fetch to /api/auth/tracks/
+   - fetchProjects() now calls listProjects() which hits /api/auth/projects/
+   - Updated Project interface: title → name, lastModified → updated_at
+   - Updated JSX: project.title → project.name,
+     project.lastModified → new Date(project.updated_at).toLocaleDateString()
+
+
+Display Name & Handle Editing
+==============================
+
+Summary
+-------
+Users can now set a display name (shown prominently on their profile) and
+change their handle (@username). Previously the username was read-only in
+the edit modal.
+
+Backend Changes
+---------------
+
+1. accounts/models.py
+   - Added display_name field to User (CharField, max 100, blank allowed)
+
+2. accounts/migrations/0008_user_display_name.py  (NEW)
+   - Migration to add display_name column
+
+3. accounts/serializers.py
+   - UserSerializer: added display_name to returned fields
+   - ProfileUpdateSerializer: added username and display_name as editable
+     fields. Username validation: lowercase letters, numbers, underscores
+     only (3-30 chars), must be unique. display_name allows blank.
+   - PublicProfileSerializer: added display_name to returned fields
+   - PublicTrackSerializer: added display_name (from user) to returned fields
+
+Frontend Changes
+----------------
+
+4. frontend/src/ProfilePage.tsx
+   - UserProfile interface: added display_name field
+   - New state: editDisplayName, editHandle
+   - startEditing: initializes both from current user data
+   - Edit modal: replaced read-only Name field with editable Display Name
+     input and Handle input (with @ prefix, auto-lowercases, filters invalid
+     chars via regex on input)
+   - saveProfile: sends display_name and username in PATCH request. If the
+     username changed, navigates to /@{newUsername} after save.
+   - Normal view: h1 shows display_name (falls back to username if blank),
+     @username shown below as handle
+   - Error handling: surfaces username and display_name validation errors
+
+
+Personal Music Library & Likes System
+=======================================
+
+Summary
+-------
+Users can now like/heart any published song and build a personal music library.
+Like counts are visible to everyone, and each user's Library page shows their
+liked songs.
+
+Backend Changes
+---------------
+
+1. accounts/models.py
+   - Added Like model (user + publication, unique_together, ordered by -created_at)
+   - Added like_count field to Publication (denormalized for fast queries)
+
+2. accounts/migrations/0009_like.py  (NEW)
+   - Creates Like table + adds like_count to Publication
+
+3. accounts/serializers.py
+   - PublicationSerializer: added like_count, is_liked (contextual per request
+     user), display_name
+   - Imported Like model
+
+4. accounts/views.py
+   - ToggleLikeView (POST /publications/<id>/like/): toggles like state,
+     updates denormalized like_count, returns {liked, like_count}
+   - LibraryView (GET /library/): lists user's liked publications
+
+5. accounts/urls.py
+   - Registered publications/<id>/like/ and library/ endpoints
+
+Frontend Changes
+----------------
+
+6. frontend/src/LibraryPage.tsx  (NEW)
+   - Spotify-inspired list layout with columns: #, Title (cover + name),
+     Artist, Date, Likes
+   - Play/pause controls, heart button to unlike
+   - Staggered fade-in row animations
+   - Empty state with heart icon and "Explore music" button
+
+7. frontend/src/app.tsx
+   - Added /library route → LibraryPage
+
+8. frontend/src/ListenerHome.tsx
+   - "Library" nav tab now links to /library
+
+9. frontend/src/ExplorePage.tsx
+   - Added "Published Songs" section below raw tracks
+   - Fetches from /api/auth/feed/ with auth token for is_liked context
+   - Heart/like buttons on each publication card
+   - Like count shown per card
+   - Tracks play/pause now distinguishes between track vs publication type
+
+
+Track Metadata & Social Features
+==================================
+
+Summary
+-------
+Tracks now have the same social features as publications: play counts that
+increment on every listen, like counts, and the ability to like/unlike them.
+Liking a track adds it to the user's personal library alongside liked
+publications.
+
+Backend Changes
+---------------
+
+1. accounts/models.py
+   - Track model: added play_count, like_count fields
+   - New TrackLike model (user + track, unique_together)
+
+2. accounts/migrations/0010_track_metadata.py  (NEW)
+   - Adds play_count and like_count to Track, creates TrackLike table
+
+3. accounts/serializers.py
+   - TrackSerializer: added play_count, like_count, is_liked
+   - PublicTrackSerializer: added play_count, like_count, is_liked
+
+4. accounts/views.py
+   - TrackPlayView (POST /tracks/<id>/play/): increments track play count
+   - ToggleTrackLikeView (POST /tracks/<id>/like/): toggles track like
+   - LibraryView: refactored to return { publications: [...], tracks: [...] }
+
+5. accounts/urls.py
+   - Registered tracks/<id>/play/ and tracks/<id>/like/
+
+Frontend Changes
+----------------
+
+6. frontend/src/ExplorePage.tsx
+   - Track interface extended with play_count, like_count, display_name, is_liked
+   - Track cards now show heart button + play count + like count
+   - togglePlay fires play count increment API (tracks and publications)
+   - toggleTrackLike function for track-specific likes
+   - Explore fetch passes auth header for is_liked context
+
+7. frontend/src/LibraryPage.tsx  (REWRITTEN)
+   - Now handles API response with { publications, tracks } shape
+   - Unified LibraryItem type merges pubs and tracks into one list
+   - Shows Plays column instead of Date column
+   - Play count increments on play
+   - Like/unlike works for both tracks and publications
+   - Song desc shows "Track" or publication description
+
+
+Global Audio Player & Persistent Bottom Bar
+===========================================
+
+Summary
+-------
+Moved audio playback from individual components into a global Zustand store (`playerStore.ts`), ensuring tracks continue playing persistently when navigating between pages. Added a modern bottom-bar player (`PlayerBar.tsx`) matching the app's dark-mode aesthetic with play/pause, volume, seek, and track info.
+
+Changes
+-------
+1. frontend/src/stores/playerStore.ts (NEW)
+   - Created a Zustand store managing a single HTMLAudioElement.
+   - Handles play/pause, volume, seek operations.
+   - Automatically tracks duration and current playback time.
+   - Fires the play count increment API endpoint exactly once per track per session.
+
+2. frontend/src/components/PlayerBar.tsx (NEW)
+   - Persistent bottom bar UI for the global player.
+   - Displays cover art (or fallback icon), title, and artist handle (clickable to go to profile).
+   - Play/pause toggle, interactive progress/seek bar, time display.
+   - Custom styled volume slider with speaker icon.
+
+3. frontend/src/app.tsx
+   - Mounted `<PlayerBar />` alongside the router so it stays unmounted until a track plays, and persists across routes.
+
+4. frontend/src/ExplorePage.tsx, LibraryPage.tsx, ProfilePage.tsx
+   - Removed all local `HTMLAudioElement` usage and local state (`playingId`, `audioRef`).
+   - Replaced all play buttons with calls to `usePlayerStore().play()`.
+   - The UI now reactively watches `usePlayerStore().isPlaying` and `currentTrack` to display play/pause icons correctly across all pages.
+
+
+Dedicated Track & Publication Pages
+===================================
+
+Summary
+-------
+Added SoundCloud-style dedicated detail pages for viewing individual tracks and
+publications. Accessible by clicking the track info inside the global PlayerBar
+while listening.
+
+Backend Changes
+---------------
+1. accounts/views.py
+   - Added `TrackDetailView` and `PublicationDetailView` (RetrieveAPIView) to
+     return single records by ID for public consumption.
+2. accounts/urls.py
+   - Registered `GET /api/auth/tracks/<id>/detail/`
+   - Registered `GET /api/auth/publications/<id>/detail/`
+
+Frontend Changes
+----------------
+1. frontend/src/ContentPage.tsx (NEW)
+   - A single component designed to handle both `/track/:id` and `/publication/:id`.
+   - Features a large hero banner with a blurred background derived from the cover art.
+   - Large play/pause button that syncs directly with the global `playerStore`.
+   - Displays like count, play count, description, upload date, and a simulated waveform.
+   - Handles like/unlike toggling directly from the page.
+
+2. frontend/src/app.tsx
+   - Registered `<Route path="/:type/:id" element={<ContentPage />} />`
+
+3. frontend/src/components/PlayerBar.tsx
+   - Made the 'Left' section (cover art and title) clickable, routing the user
+     to the current track's dedicated details page.
+
+Global Player Bugfixes
+----------------------
+- **Play/Pause Desync Bug**: Fixed an issue where rapidly switching tracks would cause
+  the Play icon to show instead of the Pause icon, despite the audio playing. This
+  occurred because the old audio track's asynchronous `pause` event would fire late
+  and override the global store's `isPlaying` state to `false`. Added strict object
+  identity checks (`get()._audio === audio`) to all event listeners.
+
+Track Metadata Editing
+----------------------
+1. backend/accounts/models.py
+   - Added `cover_image` to the `Track` model.
+   - Updated Cloudinary deletion signals to include `cover_image` cleanup.
+2. backend/accounts/views.py & urls.py
+   - Upgraded `TrackDeleteView` to `TrackUpdateDeleteView` (RetrieveUpdateDestroyAPIView) to support `PATCH` edits.
+   - Upgraded `PublicationDeleteView` similarly.
+3. frontend/src/components/TrackEditModal.tsx
+   - Built a universal modal for uploading tracks and editing track/publication metadata.
+4. frontend/src/ProfilePage.tsx
+   - Integrated `TrackEditModal` into the track upload flow. Selecting an audio file now opens the modal to capture Title and Cover Image before creating the track.
+   - Added an 'Edit' (✎) button for users to rename or change the cover of their existing tracks.
+
+- **Logout Player Visibility Bug**: Fixed an issue where the global audio player would
+  remain visible and continue playing audio on authentication screens (like the login page)
+  after the user logged out. 
+  - Updated `PlayerBar.tsx` to completely hide itself on paths like `/login` and `/signup`.
+  - Updated `ListenerHome.tsx`, `ProfilePage.tsx`, and `workstation/Create.tsx` to 
+    explicitly call the `stop()` function on the global player store before logging the user out.
+
+
+==================================================
+Feature Implementation: Home Page Trending & New Releases
+==================================================
+
+Backend Changes:
+- Created `TrendingTracksView` in `accounts/views.py` to fetch tracks and publications sorted by `play_count` and `like_count`.
+- Created `NewReleasesView` in `accounts/views.py` to fetch recently uploaded tracks and publications.
+- Registered `/api/auth/trending/` and `/api/auth/new-releases/` in `accounts/urls.py`.
+
+Frontend Changes:
+- Updated `ListenerHome.tsx` to fetch data from the new backend endpoints on mount.
+- Added UI carousels for "Trending Now" and "New Releases", displaying cover art, titles, and artists.
+- Integrated the global player into these carousels to allow directly playing trending and new release tracks using `playGlobally(item)`.
+- Fixed JSX tag mismatch errors in `ListenerHome.tsx` that occurred during UI updates.
+- Removed duplicate `pushUndoSnapshot` method signature in `workstation/state/dawStore.ts` that was causing TypeScript compiler errors.
+
+The UI displays horizontal scrolling carousels with hover states on the play buttons, correctly linking into the global Zustand `playerStore`.
+
+==================================================
+Feature: Home Page Redesign (SoundCloud-inspired)
+Date: 2026-03-02
+==================================================
+
+Changes:
+- Completely rewrote ListenerHome.tsx with a SoundCloud-style dark design.
+- New sticky header with logo, search bar, nav links, and Sign Out button.
+- Orange (#ff5500) accent color throughout (SoundCloud brand color).
+- Two horizontal carousel sections: 🔥 Trending and ✨ New Releases (fetched from /api/auth/trending/ and /api/auth/new-releases/).
+- Full track feed section (All Tracks) fetched from /api/auth/explore/.
+- Each track row shows: thumbnail, title, artist, animated waveform placeholder, play count.
+- Compact card components for carousel sections with hover-reveal play button.
+- Proper React hook placement (usePlayerStore at component top level) to avoid runtime crashes.
+- Integrated global player (usePlayerStore) for all play buttons.
+- Simplified minimal CSS with Inter font.
+- Build verified: ✓ 1059 modules compiled successfully.

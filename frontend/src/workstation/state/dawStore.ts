@@ -14,63 +14,71 @@ const DEFAULT_TRACKS: Track[] = [
     id: 2, name: 'Keys', type: 'instrument', instrument: 'triangle',
     color: '#9b59b6', muted: false, solo: false, volume: 75, pan: -20,
     clips: [
-      { id: 2, name: 'Chord Progression', startBeat: 4, duration: 8, notes: [
-        { id: 201, pitch: 60, startBeat: 0, duration: 2, velocity: 80 },
-        { id: 202, pitch: 64, startBeat: 0, duration: 2, velocity: 75 },
-        { id: 203, pitch: 67, startBeat: 0, duration: 2, velocity: 75 },
-        { id: 204, pitch: 62, startBeat: 2, duration: 2, velocity: 80 },
-        { id: 205, pitch: 65, startBeat: 2, duration: 2, velocity: 75 },
-        { id: 206, pitch: 69, startBeat: 2, duration: 2, velocity: 75 },
-        { id: 207, pitch: 64, startBeat: 4, duration: 2, velocity: 80 },
-        { id: 208, pitch: 67, startBeat: 4, duration: 2, velocity: 75 },
-        { id: 209, pitch: 71, startBeat: 4, duration: 2, velocity: 75 },
-        { id: 210, pitch: 60, startBeat: 6, duration: 2, velocity: 80 },
-        { id: 211, pitch: 64, startBeat: 6, duration: 2, velocity: 75 },
-        { id: 212, pitch: 67, startBeat: 6, duration: 2, velocity: 75 },
-      ] },
-      { id: 3, name: 'Melody', startBeat: 14, duration: 6, notes: [
-        { id: 301, pitch: 72, startBeat: 0, duration: 1, velocity: 90 },
-        { id: 302, pitch: 74, startBeat: 1, duration: 0.5, velocity: 85 },
-        { id: 303, pitch: 76, startBeat: 1.5, duration: 1.5, velocity: 85 },
-        { id: 304, pitch: 74, startBeat: 3, duration: 1, velocity: 80 },
-        { id: 305, pitch: 72, startBeat: 4, duration: 2, velocity: 90 },
-      ] },
+      {
+        id: 2, name: 'Chord Progression', startBeat: 4, duration: 8, notes: [
+          { id: 201, pitch: 60, startBeat: 0, duration: 2, velocity: 80 },
+          { id: 202, pitch: 64, startBeat: 0, duration: 2, velocity: 75 },
+          { id: 203, pitch: 67, startBeat: 0, duration: 2, velocity: 75 },
+          { id: 204, pitch: 62, startBeat: 2, duration: 2, velocity: 80 },
+          { id: 205, pitch: 65, startBeat: 2, duration: 2, velocity: 75 },
+          { id: 206, pitch: 69, startBeat: 2, duration: 2, velocity: 75 },
+          { id: 207, pitch: 64, startBeat: 4, duration: 2, velocity: 80 },
+          { id: 208, pitch: 67, startBeat: 4, duration: 2, velocity: 75 },
+          { id: 209, pitch: 71, startBeat: 4, duration: 2, velocity: 75 },
+          { id: 210, pitch: 60, startBeat: 6, duration: 2, velocity: 80 },
+          { id: 211, pitch: 64, startBeat: 6, duration: 2, velocity: 75 },
+          { id: 212, pitch: 67, startBeat: 6, duration: 2, velocity: 75 },
+        ]
+      },
+      {
+        id: 3, name: 'Melody', startBeat: 14, duration: 6, notes: [
+          { id: 301, pitch: 72, startBeat: 0, duration: 1, velocity: 90 },
+          { id: 302, pitch: 74, startBeat: 1, duration: 0.5, velocity: 85 },
+          { id: 303, pitch: 76, startBeat: 1.5, duration: 1.5, velocity: 85 },
+          { id: 304, pitch: 74, startBeat: 3, duration: 1, velocity: 80 },
+          { id: 305, pitch: 72, startBeat: 4, duration: 2, velocity: 90 },
+        ]
+      },
     ],
   },
   {
     id: 3, name: 'Synth Line', type: 'instrument', instrument: 'saw-lead',
     color: '#f1c40f', muted: false, solo: false, volume: 70, pan: 30,
-    clips: [{ id: 4, name: 'Synth Line', startBeat: 8, duration: 12, notes: [
-      { id: 401, pitch: 48, startBeat: 0, duration: 3, velocity: 90 },
-      { id: 402, pitch: 48, startBeat: 4, duration: 2, velocity: 85 },
-      { id: 403, pitch: 50, startBeat: 7, duration: 3, velocity: 85 },
-      { id: 404, pitch: 48, startBeat: 10, duration: 2, velocity: 90 },
-    ] }],
+    clips: [{
+      id: 4, name: 'Synth Line', startBeat: 8, duration: 12, notes: [
+        { id: 401, pitch: 48, startBeat: 0, duration: 3, velocity: 90 },
+        { id: 402, pitch: 48, startBeat: 4, duration: 2, velocity: 85 },
+        { id: 403, pitch: 50, startBeat: 7, duration: 3, velocity: 85 },
+        { id: 404, pitch: 48, startBeat: 10, duration: 2, velocity: 90 },
+      ]
+    }],
     effects: { ...DEFAULT_EFFECTS }, volumeAutomation: [],
   },
   {
     id: 4, name: 'Drums', type: 'drums', instrument: 'membrane',
     color: '#3498db', muted: false, solo: false, volume: 85, pan: 0,
-    clips: [{ id: 5, name: 'Beat', startBeat: 12, duration: 10, notes: [
-      { id: 501, pitch: 36, startBeat: 0, duration: 0.5, velocity: 100 },
-      { id: 502, pitch: 38, startBeat: 1, duration: 0.5, velocity: 90 },
-      { id: 503, pitch: 36, startBeat: 2, duration: 0.5, velocity: 100 },
-      { id: 504, pitch: 38, startBeat: 3, duration: 0.5, velocity: 90 },
-      { id: 505, pitch: 42, startBeat: 0, duration: 0.25, velocity: 70 },
-      { id: 506, pitch: 42, startBeat: 0.5, duration: 0.25, velocity: 60 },
-      { id: 507, pitch: 42, startBeat: 1, duration: 0.25, velocity: 70 },
-      { id: 508, pitch: 42, startBeat: 1.5, duration: 0.25, velocity: 60 },
-      { id: 509, pitch: 42, startBeat: 2, duration: 0.25, velocity: 70 },
-      { id: 510, pitch: 42, startBeat: 2.5, duration: 0.25, velocity: 60 },
-      { id: 511, pitch: 42, startBeat: 3, duration: 0.25, velocity: 70 },
-      { id: 512, pitch: 42, startBeat: 3.5, duration: 0.25, velocity: 60 },
-      { id: 513, pitch: 36, startBeat: 4, duration: 0.5, velocity: 100 },
-      { id: 514, pitch: 36, startBeat: 4.5, duration: 0.5, velocity: 80 },
-      { id: 515, pitch: 38, startBeat: 5, duration: 0.5, velocity: 90 },
-      { id: 516, pitch: 36, startBeat: 6, duration: 0.5, velocity: 100 },
-      { id: 517, pitch: 38, startBeat: 7, duration: 0.5, velocity: 90 },
-      { id: 518, pitch: 36, startBeat: 8, duration: 1, velocity: 100 },
-    ] }],
+    clips: [{
+      id: 5, name: 'Beat', startBeat: 12, duration: 10, notes: [
+        { id: 501, pitch: 36, startBeat: 0, duration: 0.5, velocity: 100 },
+        { id: 502, pitch: 38, startBeat: 1, duration: 0.5, velocity: 90 },
+        { id: 503, pitch: 36, startBeat: 2, duration: 0.5, velocity: 100 },
+        { id: 504, pitch: 38, startBeat: 3, duration: 0.5, velocity: 90 },
+        { id: 505, pitch: 42, startBeat: 0, duration: 0.25, velocity: 70 },
+        { id: 506, pitch: 42, startBeat: 0.5, duration: 0.25, velocity: 60 },
+        { id: 507, pitch: 42, startBeat: 1, duration: 0.25, velocity: 70 },
+        { id: 508, pitch: 42, startBeat: 1.5, duration: 0.25, velocity: 60 },
+        { id: 509, pitch: 42, startBeat: 2, duration: 0.25, velocity: 70 },
+        { id: 510, pitch: 42, startBeat: 2.5, duration: 0.25, velocity: 60 },
+        { id: 511, pitch: 42, startBeat: 3, duration: 0.25, velocity: 70 },
+        { id: 512, pitch: 42, startBeat: 3.5, duration: 0.25, velocity: 60 },
+        { id: 513, pitch: 36, startBeat: 4, duration: 0.5, velocity: 100 },
+        { id: 514, pitch: 36, startBeat: 4.5, duration: 0.5, velocity: 80 },
+        { id: 515, pitch: 38, startBeat: 5, duration: 0.5, velocity: 90 },
+        { id: 516, pitch: 36, startBeat: 6, duration: 0.5, velocity: 100 },
+        { id: 517, pitch: 38, startBeat: 7, duration: 0.5, velocity: 90 },
+        { id: 518, pitch: 36, startBeat: 8, duration: 1, velocity: 100 },
+      ]
+    }],
     effects: { ...DEFAULT_EFFECTS }, volumeAutomation: [],
   },
 ];
@@ -333,10 +341,6 @@ const useDawStore = create<DawStore>((set, get) => ({
       ? { ...t, effects: { ...(t.effects || DEFAULT_EFFECTS), ...effects } }
       : t),
   })),
-  pushUndoSnapshot: (label) => set((s) => {
-    pushUndo(s.tracks, label);
-    return { canUndo: true, canRedo: false, undoLabel: label, redoLabel: '' };
-  }),
   setVolumeAutomation: (trackId, points) => set((s) => ({
     tracks: s.tracks.map((t) => t.id === trackId ? { ...t, volumeAutomation: points } : t),
   })),
@@ -634,6 +638,11 @@ const useDawStore = create<DawStore>((set, get) => ({
   }),
 
   // Undo/Redo
+  pushUndoSnapshot: (label: string) => {
+    const { tracks, undoVersion } = get();
+    pushUndo(tracks, label);
+    set({ canUndo: true, canRedo: false, undoLabel: label, redoLabel: '', undoVersion: undoVersion + 1 });
+  },
   undo: () => {
     if (undoStack.length === 0) return;
     const current = get();

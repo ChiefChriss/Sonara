@@ -1,35 +1,30 @@
-# Python / Django
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
-db.sqlite3
-*.sqlite3
-backend/__pycache__/
-backend/db.sqlite3
-
-# Node / Frontend
-node_modules/
-**/node_modules/
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
 dist/
-.next/
-out/
+build/
+*.egg
 
-# Environment
-.env
-.env.local
-backend/.env
+# Django
+db.sqlite3
+*.log
+media/
 
-# IDE
-.vscode/
-.idea/
-package-lock.json
+# Node
+node_modules/
+frontend/dist/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-backend/media
-frontend/dist/index.html
-frontend/dist/assets/index-DrL7MnwB.js
+# IDEs
+.idea/
+.vscode/
+*.swp
