@@ -69,7 +69,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             state._audio.load();
         }
 
-        const audio = new Audio(track.audioUrl);
+        const audio = new Audio();
+        audio.crossOrigin = 'anonymous';
+        audio.src = track.audioUrl;
         audio.volume = state.volume;
 
         audio.addEventListener('loadedmetadata', () => {
