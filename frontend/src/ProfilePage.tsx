@@ -423,6 +423,7 @@ const ProfilePage = () => {
         .role-pill-btn:hover { transform: none !important; opacity: 1 !important; }
         .edit-modal-backdrop { animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
@@ -432,16 +433,16 @@ const ProfilePage = () => {
         </div>
 
         <nav style={styles.sidebarNav}>
-          <Link to="/home" style={styles.sidebarLink}>
+          <Link to="/home" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🏠</span> Home
           </Link>
-          <Link to="/explore" style={styles.sidebarLink}>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🔥</span> Trending
           </Link>
-          <Link to="/create" style={styles.sidebarLink}>
+          <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🎵</span> Create Music
           </Link>
-          <Link to="/explore" style={styles.sidebarLink}>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🛒</span> Marketplace
           </Link>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>

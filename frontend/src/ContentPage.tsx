@@ -76,24 +76,25 @@ const ContentPage = () => {
 
     const sidebar = (
         <aside style={styles.sidebar}>
+            <style>{`.sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }`}</style>
             <div style={styles.sidebarTop}>
                 <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
             </div>
 
             <nav style={styles.sidebarNav}>
-                <Link to="/home" style={styles.sidebarLink}>
+                <Link to="/home" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}>🏠</span> Home
                 </Link>
-                <Link to="/explore" style={styles.sidebarLink}>
+                <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}>🔥</span> Trending
                 </Link>
-                <Link to="/create" style={styles.sidebarLink}>
+                <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}>🎵</span> Create Music
                 </Link>
-                <Link to="/explore" style={styles.sidebarLink}>
+                <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}>🛒</span> Marketplace
                 </Link>
-                <Link to={username ? `/@${username}` : '/profile'} style={styles.sidebarLink}>
+                <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}>👤</span> Profile
                 </Link>
             </nav>

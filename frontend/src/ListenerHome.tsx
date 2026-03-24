@@ -295,16 +295,16 @@ const ListenerHome = () => {
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
             <span style={styles.sidebarIcon}>🏠</span> Home
           </div>
-          <Link to="/explore" style={styles.sidebarLink}>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🔥</span> Trending
           </Link>
-          <Link to="/create" style={styles.sidebarLink}>
+          <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🎵</span> Create Music
           </Link>
-          <Link to="/explore" style={styles.sidebarLink}>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>🛒</span> Marketplace
           </Link>
-          <Link to={username ? `/@${username}` : '/profile'} style={styles.sidebarLink}>
+          <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}>👤</span> Profile
           </Link>
         </nav>
@@ -537,6 +537,7 @@ const ListenerHome = () => {
         .card-play-btn { opacity: 0; transition: opacity 0.15s; }
         .card-img-wrap:hover .card-play-btn { opacity: 1 !important; }
         .track-row:hover { background: rgba(255,255,255,0.04) !important; }
+        .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
         ::-webkit-scrollbar { height: 4px; width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.4); border-radius: 2px; }
