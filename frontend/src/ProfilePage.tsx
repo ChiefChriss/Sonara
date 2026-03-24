@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import NotFound from './NotFound';
 import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
 import TrackEditModal from './components/TrackEditModal';
+import sonaraLogo from './assets/sonara_logo.svg';
 
 interface UserProfile {
   id: number;
@@ -73,6 +74,7 @@ const ProfilePage = () => {
   const [followListModal, setFollowListModal] = useState<'followers' | 'following' | null>(null);
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
+  const [loggedInUsername, setLoggedInUsername] = useState('');
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
 
@@ -264,6 +266,7 @@ const ProfilePage = () => {
           if (meRes.ok) {
             const meData = await meRes.json();
             loggedInUsername = meData.username;
+            setLoggedInUsername(meData.username);
           }
         } catch { /* not logged in or token expired */ }
       }
@@ -376,9 +379,8 @@ const ProfilePage = () => {
 
   if (loading) {
     return (
-      <div style={styles.page}>
+      <div style={styles.pageWrapper}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap'); @keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={styles.backgroundOverlay} />
         <div style={styles.loadingWrap}>
           <div style={styles.spinner} />
           <span style={styles.loadingText}>Loading profile...</span>
@@ -389,9 +391,8 @@ const ProfilePage = () => {
 
   if (error) {
     return (
-      <div style={styles.page}>
+      <div style={styles.pageWrapper}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');`}</style>
-        <div style={styles.backgroundOverlay} />
         <div style={styles.errorWrap}>
           <p style={styles.errorText}>{error}</p>
           <button onClick={() => navigate('/login')} style={styles.errorButton}>Go to Login</button>
@@ -408,15 +409,14 @@ const ProfilePage = () => {
         : (user?.role ?? 'No role set').charAt(0).toUpperCase() + (user?.role ?? '').slice(1);
 
   return (
-    <div style={styles.page}>
-      <div style={styles.backgroundOverlay} />
+    <div style={styles.pageWrapper}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         button:hover { opacity: 0.9; }
         button:active { transform: scale(0.98); }
-        textarea:focus, input[type=text]:focus { outline: none; border-color: #00d4ff !important; box-shadow: 0 0 15px rgba(0, 212, 255, 0.3); }
-        .profile-upload-card:hover { border-color: rgba(0, 212, 255, 0.5); background: rgba(30, 45, 80, 0.6); }
+        textarea:focus, input[type=text]:focus { outline: none; border-color: #a78bfa !important; box-shadow: 0 0 15px rgba(167, 139, 250, 0.3); }
+        .profile-upload-card:hover { border-color: rgba(167, 139, 250, 0.5); background: rgba(30, 25, 50, 0.6); }
         @keyframes spin { to { transform: rotate(360deg); } }
         .edit-icon-btn:hover { background: rgba(255,255,255,0.25) !important; transform: scale(1.05); }
         .role-pill-btn { transition: all 0.2s ease !important; }
@@ -424,6 +424,40 @@ const ProfilePage = () => {
         .edit-modal-backdrop { animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
+
+      {/* ── Sidebar ──────────────────────────────────────────────────── */}
+      <aside style={styles.sidebar}>
+        <div style={styles.sidebarTop}>
+          <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
+        </div>
+
+        <nav style={styles.sidebarNav}>
+          <Link to="/home" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🏠</span> Home
+          </Link>
+          <Link to="/explore" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🔥</span> Trending
+          </Link>
+          <Link to="/create" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🎵</span> Create Music
+          </Link>
+          <Link to="/explore" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+          </Link>
+          <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+            <span style={styles.sidebarIcon}>👤</span> Profile
+          </div>
+        </nav>
+
+        <div style={styles.sidebarBottom}>
+          <Link to="/create" style={styles.uploadBtn}>
+            + Upload Track
+          </Link>
+        </div>
+      </aside>
+
+      {/* ── Main content area ────────────────────────────────────────── */}
+      <div style={styles.mainArea}>
 
       {/* Hidden file inputs (always in DOM) */}
       <input
@@ -640,20 +674,6 @@ const ProfilePage = () => {
           </div>
         </div>
       )}
-
-      {/* Top bar */}
-      <header style={styles.topBar}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          style={styles.backButton}
-          aria-label="Back"
-        >
-          ←
-        </button>
-        <span style={styles.topBarTitle}>Profile</span>
-        <div style={styles.topBarRight} />
-      </header>
 
       {/* Cover */}
       <div style={styles.coverWrap}>
@@ -952,28 +972,97 @@ const ProfilePage = () => {
           }}
         />
       )}
+      </div>{/* end mainArea */}
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  page: {
+  pageWrapper: {
+    display: 'flex',
     minHeight: '100vh',
-    width: '100%',
-    background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%)',
+    background: '#0f0f1a',
     fontFamily: "'Poppins', sans-serif",
     color: '#ffffff',
-    position: 'relative',
-    overflow: 'hidden',
   },
-  backgroundOverlay: {
-    position: 'absolute',
+
+  // ── Sidebar ─────────────────────────────────────────────────────────────
+  sidebar: {
+    width: 240,
+    flexShrink: 0,
+    background: '#13131f',
+    borderRight: '1px solid rgba(167,139,250,0.15)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    position: 'sticky' as const,
     top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'radial-gradient(ellipse at 50% 0%, rgba(100, 100, 200, 0.1) 0%, transparent 50%)',
-    pointerEvents: 'none',
+    height: '100vh',
+    overflowY: 'auto' as const,
+  },
+  sidebarTop: {
+    padding: '24px 20px 16px',
+    borderBottom: '1px solid rgba(167,139,250,0.1)',
+  },
+  sidebarLogo: {
+    height: 36,
+    width: 'auto',
+    filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))',
+  },
+  sidebarNav: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    padding: '16px 12px',
+    flex: 1,
+  },
+  sidebarLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '12px 16px',
+    borderRadius: 10,
+    color: 'rgba(255,255,255,0.6)',
+    textDecoration: 'none',
+    fontSize: 14,
+    fontWeight: 500,
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+  },
+  sidebarLinkActive: {
+    color: '#ffffff',
+    background: 'rgba(167,139,250,0.15)',
+  },
+  sidebarIcon: {
+    fontSize: 18,
+    width: 24,
+    textAlign: 'center' as const,
+  },
+  sidebarBottom: {
+    padding: '16px 12px 24px',
+    borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  uploadBtn: {
+    display: 'block',
+    textAlign: 'center' as const,
+    padding: '12px 20px',
+    borderRadius: 9999,
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: 14,
+    textDecoration: 'none',
+    boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+    border: 'none',
+    fontFamily: "'Poppins', sans-serif",
+  },
+
+  // ── Main area ───────────────────────────────────────────────────────────
+  mainArea: {
+    flex: 1,
+    minWidth: 0,
+    overflowY: 'auto' as const,
   },
   loadingWrap: {
     display: 'flex',
@@ -989,7 +1078,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '32px',
     height: '32px',
     border: '3px solid rgba(255,255,255,0.2)',
-    borderTopColor: '#00d4ff',
+    borderTopColor: '#a78bfa',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -1016,46 +1105,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 20px',
     borderRadius: '9999px',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '15px',
     fontWeight: 600,
     cursor: 'pointer',
-    boxShadow: '0 4px 20px rgba(0, 212, 255, 0.3)',
-  },
-  topBar: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: '53px',
-    padding: '0 16px',
-    background: 'rgba(10, 10, 26, 0.9)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(100, 150, 200, 0.2)',
-  },
-  backButton: {
-    width: '34px',
-    height: '34px',
-    borderRadius: '50%',
-    border: 'none',
-    background: 'transparent',
-    color: '#ffffff',
-    fontSize: '18px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarTitle: {
-    fontSize: '19px',
-    fontWeight: 700,
-    color: '#ffffff',
-  },
-  topBarRight: {
-    width: '34px',
+    boxShadow: '0 4px 20px rgba(167, 139, 250, 0.3)',
   },
   coverWrap: {
     width: '100%',
@@ -1065,13 +1120,13 @@ const styles: Record<string, React.CSSProperties> = {
   cover: {
     width: '100%',
     height: '260px',
-    background: 'linear-gradient(135deg, rgba(20, 30, 60, 0.9) 0%, rgba(30, 50, 90, 0.7) 50%, rgba(0, 80, 120, 0.6) 100%)',
+    background: 'linear-gradient(135deg, rgba(19, 19, 31, 0.9) 0%, rgba(30, 25, 50, 0.7) 50%, rgba(40, 20, 60, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottom: '1px solid rgba(100, 150, 200, 0.3)',
+    borderBottom: '1px solid rgba(167, 139, 250, 0.2)',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1081,7 +1136,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'linear-gradient(180deg, transparent 40%, rgba(10, 10, 26, 0.7) 100%)',
+    background: 'linear-gradient(180deg, transparent 40%, rgba(15, 15, 26, 0.7) 100%)',
     pointerEvents: 'none',
   },
   /* ── Edit modal styles ── */
@@ -1104,8 +1159,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: '600px',
     borderRadius: '20px',
-    background: '#0f0f23',
-    border: '1px solid rgba(100, 150, 200, 0.2)',
+    background: '#13131f',
+    border: '1px solid rgba(167, 139, 250, 0.15)',
     boxShadow: '0 24px 80px rgba(0, 0, 0, 0.6)',
     overflow: 'hidden',
     animation: 'fadeIn 0.2s ease',
@@ -1119,9 +1174,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     height: '53px',
     padding: '0 16px',
-    background: 'rgba(10, 10, 26, 0.95)',
+    background: 'rgba(15, 15, 26, 0.95)',
     backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(100, 150, 200, 0.15)',
+    borderBottom: '1px solid rgba(167, 139, 250, 0.12)',
   },
   editCloseBtn: {
     width: '36px',
@@ -1181,7 +1236,7 @@ const styles: Record<string, React.CSSProperties> = {
   editCover: {
     width: '100%',
     height: '200px',
-    background: 'linear-gradient(135deg, rgba(20, 30, 60, 0.9) 0%, rgba(30, 50, 90, 0.7) 50%, rgba(0, 80, 120, 0.6) 100%)',
+    background: 'linear-gradient(135deg, rgba(19, 19, 31, 0.9) 0%, rgba(30, 25, 50, 0.7) 50%, rgba(40, 20, 60, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     display: 'flex',
@@ -1212,7 +1267,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '14px',
-    border: '2px solid #0a0a1a',
+    border: '2px solid #0f0f1a',
     backdropFilter: 'blur(4px)',
   },
   avatarRemoveLink: {
@@ -1244,7 +1299,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '14px 16px',
     borderRadius: '4px',
-    border: '1px solid rgba(100, 150, 200, 0.25)',
+    border: '1px solid rgba(167, 139, 250, 0.18)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '16px',
@@ -1255,7 +1310,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
     padding: '14px 16px',
     borderRadius: '4px',
-    border: '1px solid rgba(100, 150, 200, 0.25)',
+    border: '1px solid rgba(167, 139, 250, 0.18)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '16px',
@@ -1267,7 +1322,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     padding: '14px 16px',
     borderRadius: '4px',
-    border: '1px solid rgba(100, 150, 200, 0.25)',
+    border: '1px solid rgba(167, 139, 250, 0.18)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '16px',
@@ -1286,7 +1341,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     padding: '10px 20px',
     borderRadius: '9999px',
-    border: '2px solid rgba(100, 150, 200, 0.25)',
+    border: '2px solid rgba(167, 139, 250, 0.18)',
     background: 'transparent',
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: '14px',
@@ -1295,10 +1350,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "'Poppins', sans-serif",
   },
   rolePillBtnActive: {
-    borderColor: '#00d4ff',
-    background: 'rgba(0, 212, 255, 0.12)',
-    color: '#00d4ff',
-    boxShadow: '0 0 20px rgba(0, 212, 255, 0.2), inset 0 0 20px rgba(0, 212, 255, 0.05)',
+    borderColor: '#a78bfa',
+    background: 'rgba(167, 139, 250, 0.12)',
+    color: '#a78bfa',
+    boxShadow: '0 0 20px rgba(167, 139, 250, 0.2), inset 0 0 20px rgba(167, 139, 250, 0.05)',
   },
   main: {
     maxWidth: '1280px',
@@ -1308,8 +1363,8 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 1,
     paddingLeft: '24px',
     paddingRight: '24px',
-    borderLeft: '1px solid rgba(100, 150, 200, 0.2)',
-    borderRight: '1px solid rgba(100, 150, 200, 0.2)',
+    borderLeft: '1px solid rgba(167, 139, 250, 0.15)',
+    borderRight: '1px solid rgba(167, 139, 250, 0.15)',
     minHeight: 'calc(100vh - 53px - 230px + 60px)',
   },
   coverPlaceholder: {
@@ -1333,10 +1388,10 @@ const styles: Record<string, React.CSSProperties> = {
     width: '120px',
     height: '120px',
     borderRadius: '50%',
-    background: 'rgba(30, 45, 80, 0.8)',
+    background: 'rgba(30, 25, 50, 0.8)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    border: '4px solid #0a0a1a',
+    border: '4px solid #0f0f1a',
     marginTop: '-60px',
     display: 'flex',
     alignItems: 'center',
@@ -1366,7 +1421,7 @@ const styles: Record<string, React.CSSProperties> = {
   editBtn: {
     padding: '6px 14px',
     borderRadius: '9999px',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
+    border: '2px solid rgba(167, 139, 250, 0.2)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '14px',
@@ -1383,8 +1438,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '12px',
     padding: '4px 12px',
     borderRadius: '9999px',
-    background: 'rgba(0, 212, 255, 0.2)',
-    color: '#00d4ff',
+    background: 'rgba(167, 139, 250, 0.2)',
+    color: '#a78bfa',
     fontSize: '13px',
     fontWeight: 600,
   },
@@ -1406,8 +1461,8 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '520px',
     padding: '24px',
     borderRadius: '16px',
-    background: 'rgba(30, 45, 80, 0.4)',
-    border: '1px solid rgba(100, 150, 200, 0.2)',
+    background: 'rgba(30, 25, 50, 0.4)',
+    border: '1px solid rgba(167, 139, 250, 0.15)',
   },
   editCardTitle: {
     fontSize: '14px',
@@ -1431,8 +1486,8 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     padding: '12px 14px',
     borderRadius: '12px',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
-    background: 'rgba(30, 45, 80, 0.6)',
+    border: '2px solid rgba(167, 139, 250, 0.2)',
+    background: 'rgba(30, 25, 50, 0.6)',
     color: '#ffffff',
     fontSize: '15px',
     fontFamily: "'Poppins', sans-serif",
@@ -1462,7 +1517,7 @@ const styles: Record<string, React.CSSProperties> = {
   checkbox: {
     width: '18px',
     height: '18px',
-    accentColor: '#00d4ff',
+    accentColor: '#a78bfa',
     cursor: 'pointer',
   },
   uploadRow: {
@@ -1486,8 +1541,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '10px',
     padding: '12px 20px',
     borderRadius: '12px',
-    border: '2px dashed rgba(100, 150, 200, 0.4)',
-    background: 'rgba(30, 45, 80, 0.4)',
+    border: '2px dashed rgba(167, 139, 250, 0.25)',
+    background: 'rgba(30, 25, 50, 0.4)',
     color: 'rgba(255, 255, 255, 0.9)',
     fontSize: '14px',
     fontWeight: 500,
@@ -1524,7 +1579,7 @@ const styles: Record<string, React.CSSProperties> = {
   cancelBtn: {
     padding: '8px 18px',
     borderRadius: '9999px',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
+    border: '2px solid rgba(167, 139, 250, 0.2)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '14px',
@@ -1535,12 +1590,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 18px',
     borderRadius: '9999px',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
-    boxShadow: '0 4px 15px rgba(0, 212, 255, 0.3)',
+    boxShadow: '0 4px 15px rgba(167, 139, 250, 0.3)',
   },
   actions: {
     marginTop: '16px',
@@ -1558,7 +1613,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabsWrap: {
     display: 'flex',
-    borderBottom: '1px solid rgba(100, 150, 200, 0.2)',
+    borderBottom: '1px solid rgba(167, 139, 250, 0.15)',
   },
   tab: {
     flex: 1,
@@ -1571,9 +1626,9 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   tabActive: {
-    color: '#00d4ff',
+    color: '#a78bfa',
     fontWeight: 600,
-    boxShadow: 'inset 0 -2px 0 #00d4ff',
+    boxShadow: 'inset 0 -2px 0 #a78bfa',
   },
   tabContent: {
     padding: '32px 16px',
@@ -1589,8 +1644,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '28px',
     padding: '20px',
     borderRadius: '16px',
-    background: 'rgba(30, 45, 80, 0.35)',
-    border: '1px solid rgba(100, 150, 200, 0.2)',
+    background: 'rgba(30, 25, 50, 0.35)',
+    border: '1px solid rgba(167, 139, 250, 0.15)',
   },
   trackSectionTitle: {
     fontSize: '16px',
@@ -1614,8 +1669,8 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: '160px',
     padding: '10px 14px',
     borderRadius: '10px',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
-    background: 'rgba(30, 45, 80, 0.6)',
+    border: '2px solid rgba(167, 139, 250, 0.2)',
+    background: 'rgba(30, 25, 50, 0.6)',
     color: '#ffffff',
     fontSize: '14px',
     fontFamily: "'Poppins', sans-serif",
@@ -1625,18 +1680,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 20px',
     borderRadius: '9999px',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
-    boxShadow: '0 4px 15px rgba(0, 212, 255, 0.3)',
+    boxShadow: '0 4px 15px rgba(167, 139, 250, 0.3)',
     whiteSpace: 'nowrap' as const,
   },
   trackCancelBtn: {
     padding: '10px 16px',
     borderRadius: '9999px',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
+    border: '2px solid rgba(167, 139, 250, 0.2)',
     background: 'transparent',
     color: '#ffffff',
     fontSize: '14px',
@@ -1655,8 +1710,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '14px',
     padding: '14px 16px',
     borderRadius: '14px',
-    background: 'rgba(30, 45, 80, 0.35)',
-    border: '1px solid rgba(100, 150, 200, 0.15)',
+    background: 'rgba(30, 25, 50, 0.35)',
+    border: '1px solid rgba(167, 139, 250, 0.12)',
     transition: 'background 0.15s',
   },
   playBtn: {
@@ -1664,7 +1719,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '42px',
     borderRadius: '50%',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '16px',
     cursor: 'pointer',
@@ -1672,7 +1727,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 2px 10px rgba(0, 212, 255, 0.25)',
+    boxShadow: '0 2px 10px rgba(167, 139, 250, 0.25)',
   },
   trackInfo: {
     flex: 1,
@@ -1729,13 +1784,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 28px',
     borderRadius: '9999px',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff, #0096c7)',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
     color: '#fff',
     fontSize: '14px',
     fontWeight: 600,
     fontFamily: "'Poppins', sans-serif",
     cursor: 'pointer',
-    boxShadow: '0 3px 12px rgba(0,212,255,0.25)',
+    boxShadow: '0 3px 12px rgba(167,139,250,0.25)',
     transition: 'all 0.2s',
     marginBottom: '14px',
     marginRight: '15px'
@@ -1743,7 +1798,7 @@ const styles: Record<string, React.CSSProperties> = {
   unfollowBtn: {
     padding: '8px 28px',
     borderRadius: '9999px',
-    border: '2px solid rgba(100,150,200,0.4)',
+    border: '2px solid rgba(167,139,250,0.25)',
     background: 'transparent',
     color: 'rgba(255,255,255,0.7)',
     fontSize: '14px',
@@ -1767,9 +1822,9 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: '420px',
     maxHeight: '70vh',
-    background: '#1a1a2e',
+    background: '#13131f',
     borderRadius: '16px',
-    border: '1px solid rgba(100,150,200,0.2)',
+    border: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
     overflow: 'hidden',
@@ -1779,7 +1834,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderBottom: '1px solid rgba(100,150,200,0.15)',
+    borderBottom: '1px solid rgba(167,139,250,0.12)',
   },
   followModalTitle: {
     fontSize: '16px',
@@ -1805,7 +1860,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 20px',
     cursor: 'pointer',
     transition: 'background 0.15s',
-    borderBottom: '1px solid rgba(100,150,200,0.08)',
+    borderBottom: '1px solid rgba(167,139,250,0.06)',
   },
   followUserAvatar: {
     width: '40px',
@@ -1818,7 +1873,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '40px',
     height: '40px',
     borderRadius: '50%',
-    background: 'rgba(30,45,80,0.8)',
+    background: 'rgba(30,25,50,0.8)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
