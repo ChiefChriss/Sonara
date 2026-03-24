@@ -1809,6 +1809,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'all 0.2s',
     marginBottom: '14px',
+    marginRight: '15px'
   },
   modalOverlay: {
     position: 'fixed',
