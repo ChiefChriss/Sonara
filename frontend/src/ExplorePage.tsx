@@ -36,6 +36,7 @@ const ExplorePage = () => {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [publications, setPublications] = useState<Publication[]>([]);
   const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState('');
   const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -44,6 +45,18 @@ const ExplorePage = () => {
     document.title = 'Explore | Sonara';
     const token = localStorage.getItem('accessToken');
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+    // Fetch username for profile link
+    const fetchProfile = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/profile/`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          setUsername(data.username);
+        }
+      } catch { /* silently fail */ }
+    };
 
     const fetchTracks = async () => {
       try {
@@ -59,7 +72,7 @@ const ExplorePage = () => {
       } catch { /* silently fail */ }
     };
 
-    Promise.all([fetchTracks(), fetchPublications()]).finally(() => setLoading(false));
+    Promise.all([fetchProfile(), fetchTracks(), fetchPublications()]).finally(() => setLoading(false));
   }, [API_BASE_URL]);
 
   const handlePlayTrack = (track: Track) => {
@@ -127,195 +140,273 @@ const ExplorePage = () => {
     } catch { /* silently fail */ }
   };
 
+  const profileLink = username ? `/@${username}` : '/profile';
+
+  /* ── Sidebar (shared layout) ─────────────────────────────────────────────── */
+  const renderSidebar = () => (
+    <nav style={styles.sidebar}>
+      <div style={styles.sidebarTop}>
+        <Link to="/home">
+          <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
+        </Link>
+      </div>
+      <div style={styles.sidebarNav as React.CSSProperties}>
+        <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
+          <span style={styles.sidebarIcon as React.CSSProperties}>&#127968;</span> Home
+        </Link>
+        <Link to="/explore" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+          <span style={styles.sidebarIcon as React.CSSProperties}>&#128293;</span> Trending
+        </Link>
+        <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
+          <span style={styles.sidebarIcon as React.CSSProperties}>&#127925;</span> Create Music
+        </Link>
+        <Link to="/explore" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+          <span style={styles.sidebarIcon as React.CSSProperties}>&#128722;</span> Marketplace
+        </Link>
+        <Link to={profileLink} className="sidebar-link" style={styles.sidebarLink}>
+          <span style={styles.sidebarIcon as React.CSSProperties}>&#128100;</span> Profile
+        </Link>
+      </div>
+      <div style={styles.sidebarBottom}>
+        <Link to="/create" style={styles.uploadBtn}>Upload Track</Link>
+      </div>
+    </nav>
+  );
+
   return (
-    <div style={styles.page}>
-      <div style={styles.backgroundOverlay} />
+    <div style={styles.pageWrapper}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         button:hover { opacity: 0.9; }
-        .explore-card:hover { background: rgba(30, 45, 80, 0.55) !important; transform: translateY(-2px); }
+        .explore-card:hover { background: rgba(30, 25, 50, 0.55) !important; transform: translateY(-2px); }
         .heart-btn:hover { transform: scale(1.15); }
+        .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      <header style={styles.topBar}>
-        <Link to="/home" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-          <img src={sonaraLogo} alt="Sonara" style={styles.logo} />
-        </Link>
-        <span style={styles.pageTitle}>Explore</span>
-        <div style={{ width: '50px' }} />
-      </header>
+      {renderSidebar()}
 
-      <div style={styles.main}>
-        {loading ? (
-          <div style={styles.loadingWrap}>
-            <div style={styles.spinner} />
-            <span style={styles.loadingText}>Loading tracks...</span>
-          </div>
-        ) : tracks.length === 0 ? (
-          <div style={styles.emptyWrap}>
-            <p style={styles.emptyText}>No tracks have been uploaded yet. Be the first!</p>
-            <button onClick={() => navigate('/create')} style={styles.createBtn}>Create a track</button>
-          </div>
-        ) : (
-          <>
-            <p style={styles.subtitle}>{tracks.length} track{tracks.length !== 1 ? 's' : ''} from the community</p>
-            <div style={styles.grid}>
-              {tracks.map((track) => (
-                <div key={track.id} className="explore-card" style={styles.card}>
-                  <div style={styles.cardTop}>
-                    <button
-                      type="button"
-                      onClick={() => handlePlayTrack(track)}
-                      style={styles.playBtn}
-                    >
-                      {isTrackPlaying(track.id) ? '⏸' : '▶'}
-                    </button>
-                    <button
-                      type="button"
-                      className="heart-btn"
-                      onClick={() => toggleTrackLike(track.id)}
-                      style={styles.heartBtnInline}
-                      title={track.is_liked ? 'Unlike' : 'Like'}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24"
-                        fill={track.is_liked ? '#ff4d6d' : 'none'}
-                        stroke={track.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
-                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      <div style={styles.mainArea}>
+        <div style={styles.main}>
+          {loading ? (
+            <div style={styles.loadingWrap}>
+              <div style={styles.spinner} />
+              <span style={styles.loadingText}>Loading tracks...</span>
+            </div>
+          ) : tracks.length === 0 ? (
+            <div style={styles.emptyWrap}>
+              <p style={styles.emptyText}>No tracks have been uploaded yet. Be the first!</p>
+              <button onClick={() => navigate('/create')} style={styles.createBtn}>Create a track</button>
+            </div>
+          ) : (
+            <>
+              <p style={styles.subtitle}>{tracks.length} track{tracks.length !== 1 ? 's' : ''} from the community</p>
+              <div style={styles.grid}>
+                {tracks.map((track) => (
+                  <div key={track.id} className="explore-card" style={styles.card}>
+                    <div style={styles.cardTop}>
+                      <button
+                        type="button"
+                        onClick={() => handlePlayTrack(track)}
+                        style={styles.playBtn}
                       >
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div style={styles.cardBody}>
-                    <span style={styles.trackTitle}>{track.title}</span>
-                    <span
-                      style={styles.trackArtist}
-                      onClick={() => navigate(`/@${track.username}`)}
-                    >
-                      {track.display_name || `@${track.username}`}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-                      <span style={styles.trackDate}>
-                        {new Date(track.uploaded_at).toLocaleDateString()}
+                        {isTrackPlaying(track.id) ? '\u23F8' : '\u25B6'}
+                      </button>
+                      <button
+                        type="button"
+                        className="heart-btn"
+                        onClick={() => toggleTrackLike(track.id)}
+                        style={styles.heartBtnInline}
+                        title={track.is_liked ? 'Unlike' : 'Like'}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24"
+                          fill={track.is_liked ? '#ff4d6d' : 'none'}
+                          stroke={track.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        >
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div style={styles.cardBody}>
+                      <span style={styles.trackTitle}>{track.title}</span>
+                      <span
+                        style={styles.trackArtist}
+                        onClick={() => navigate(`/@${track.username}`)}
+                      >
+                        {track.display_name || `@${track.username}`}
                       </span>
-                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        ▶ {track.play_count}
-                      </span>
-                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                        {track.like_count}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
+                        <span style={styles.trackDate}>
+                          {new Date(track.uploaded_at).toLocaleDateString()}
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {'\u25B6'} {track.play_count}
+                        </span>
+                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                          {track.like_count}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* Published Songs with Like buttons */}
-            {publications.length > 0 && (
-              <>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '48px', marginBottom: '16px' }}>Published Songs</h2>
-                <div style={styles.grid}>
-                  {publications.map((pub) => (
-                    <div key={pub.id} className="explore-card" style={styles.card}>
-                      <div style={styles.cardTop}>
-                        <button
-                          type="button"
-                          onClick={() => handlePlayPub(pub)}
-                          style={styles.playBtn}
-                        >
-                          {isPubPlaying(pub.id) ? '⏸' : '▶'}
-                        </button>
-                        <button
-                          type="button"
-                          className="heart-btn"
-                          onClick={() => toggleLike(pub.id)}
-                          style={styles.heartBtnInline}
-                          title={pub.is_liked ? 'Unlike' : 'Like'}
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24"
-                            fill={pub.is_liked ? '#ff4d6d' : 'none'}
-                            stroke={pub.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
-                            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              {/* Published Songs with Like buttons */}
+              {publications.length > 0 && (
+                <>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '48px', marginBottom: '16px' }}>Published Songs</h2>
+                  <div style={styles.grid}>
+                    {publications.map((pub) => (
+                      <div key={pub.id} className="explore-card" style={styles.card}>
+                        <div style={styles.cardTop}>
+                          <button
+                            type="button"
+                            onClick={() => handlePlayPub(pub)}
+                            style={styles.playBtn}
                           >
-                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div style={styles.cardBody}>
-                        <span style={styles.trackTitle}>{pub.title}</span>
-                        <span
-                          style={styles.trackArtist}
-                          onClick={() => navigate(`/@${pub.username}`)}
-                        >
-                          {pub.display_name || `@${pub.username}`}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-                          <span style={styles.trackDate}>
-                            {new Date(pub.published_at).toLocaleDateString()}
+                            {isPubPlaying(pub.id) ? '\u23F8' : '\u25B6'}
+                          </button>
+                          <button
+                            type="button"
+                            className="heart-btn"
+                            onClick={() => toggleLike(pub.id)}
+                            style={styles.heartBtnInline}
+                            title={pub.is_liked ? 'Unlike' : 'Like'}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 24 24"
+                              fill={pub.is_liked ? '#ff4d6d' : 'none'}
+                              stroke={pub.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
+                              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                            >
+                              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div style={styles.cardBody}>
+                          <span style={styles.trackTitle}>{pub.title}</span>
+                          <span
+                            style={styles.trackArtist}
+                            onClick={() => navigate(`/@${pub.username}`)}
+                          >
+                            {pub.display_name || `@${pub.username}`}
                           </span>
-                          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                            {pub.like_count}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
+                            <span style={styles.trackDate}>
+                              {new Date(pub.published_at).toLocaleDateString()}
+                            </span>
+                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                              {pub.like_count}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        )}
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  page: {
+  /* ── Sidebar layout ──────────────────────────────────────────────────────── */
+  pageWrapper: {
+    display: 'flex',
     minHeight: '100vh',
-    width: '100%',
-    background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%)',
+    background: '#0f0f1a',
     fontFamily: "'Poppins', sans-serif",
     color: '#ffffff',
-    position: 'relative',
   },
-  backgroundOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    background: 'radial-gradient(ellipse at 50% 0%, rgba(100, 100, 200, 0.1) 0%, transparent 50%)',
-    pointerEvents: 'none',
-  },
-  topBar: {
-    position: 'sticky',
+  sidebar: {
+    width: 240,
+    flexShrink: 0,
+    background: '#13131f',
+    borderRight: '1px solid rgba(167,139,250,0.15)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    position: 'sticky' as const,
     top: 0,
-    zIndex: 10,
+    height: '100vh',
+    overflowY: 'auto' as const,
+  },
+  sidebarTop: {
+    padding: '24px 20px 16px',
+    borderBottom: '1px solid rgba(167,139,250,0.1)',
+  },
+  sidebarLogo: {
+    height: 36,
+    width: 'auto',
+    filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))',
+  },
+  sidebarNav: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    padding: '16px 12px',
+    flex: 1,
+  },
+  sidebarLink: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    height: '64px',
-    padding: '0 24px',
-    background: 'rgba(10, 10, 26, 0.92)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(100, 150, 200, 0.2)',
+    gap: 12,
+    padding: '12px 16px',
+    borderRadius: 10,
+    color: 'rgba(255,255,255,0.6)',
+    textDecoration: 'none',
+    fontSize: 14,
+    fontWeight: 500,
+    transition: 'all 0.2s',
+    cursor: 'pointer',
   },
-  logo: {
-    height: '32px',
-    width: 'auto',
-    filter: 'drop-shadow(0 0 10px rgba(255, 255, 255, 0.15))',
+  sidebarLinkActive: {
+    color: '#ffffff',
+    background: 'rgba(167,139,250,0.15)',
   },
-  pageTitle: {
-    fontSize: '20px',
-    fontWeight: 700,
+  sidebarIcon: {
+    fontSize: 18,
+    width: 24,
+    textAlign: 'center' as const,
   },
+  sidebarBottom: {
+    padding: '16px 12px 24px',
+    borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  uploadBtn: {
+    display: 'block',
+    textAlign: 'center' as const,
+    padding: '12px 20px',
+    borderRadius: 9999,
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: 14,
+    textDecoration: 'none',
+    boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+    border: 'none',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  mainArea: {
+    flex: 1,
+    minWidth: 0,
+    overflowY: 'auto' as const,
+  },
+
+  /* ── Content area ────────────────────────────────────────────────────────── */
   main: {
     maxWidth: '1100px',
     margin: '0 auto',
     padding: '32px 24px',
-    position: 'relative',
+    position: 'relative' as const,
     zIndex: 1,
   },
   subtitle: {
@@ -335,7 +426,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '32px',
     height: '32px',
     border: '3px solid rgba(255,255,255,0.2)',
-    borderTopColor: '#00d4ff',
+    borderTopColor: '#a78bfa',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -358,12 +449,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 28px',
     borderRadius: '9999px',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '15px',
     fontWeight: 600,
     cursor: 'pointer',
-    boxShadow: '0 4px 20px rgba(0, 212, 255, 0.3)',
+    boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
   },
   grid: {
     display: 'grid',
@@ -373,8 +464,8 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     padding: '16px',
     borderRadius: '16px',
-    background: 'rgba(30, 45, 80, 0.35)',
-    border: '1px solid rgba(100, 150, 200, 0.15)',
+    background: 'rgba(30, 25, 50, 0.35)',
+    border: '1px solid rgba(167, 139, 250, 0.15)',
     transition: 'background 0.2s, transform 0.2s',
     cursor: 'default',
   },
@@ -389,7 +480,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '44px',
     borderRadius: '50%',
     border: 'none',
-    background: 'linear-gradient(135deg, #00d4ff 0%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     color: '#ffffff',
     fontSize: '17px',
     cursor: 'pointer',
@@ -397,7 +488,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 2px 12px rgba(0, 212, 255, 0.3)',
+    boxShadow: '0 2px 12px rgba(167, 139, 250, 0.3)',
   },
   avatar: {
     width: '36px',
@@ -410,7 +501,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '36px',
     height: '36px',
     borderRadius: '50%',
-    background: 'rgba(30, 45, 80, 0.8)',
+    background: 'rgba(30, 25, 50, 0.8)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -431,7 +522,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   trackArtist: {
     fontSize: '13px',
-    color: 'rgba(0, 212, 255, 0.8)',
+    color: 'rgba(167, 139, 250, 0.8)',
     cursor: 'pointer',
   },
   trackDate: {

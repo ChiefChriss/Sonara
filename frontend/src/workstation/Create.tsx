@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { listProjects } from './api/ProjectApi';
 import sonaraLogo from '../assets/sonara_logo.svg';
-import waveLeft from '../assets/wave-left.svg';
-import waveRight from '../assets/wave-right.svg';
 import { usePlayerStore } from '../stores/playerStore';
 
 interface Project {
@@ -68,63 +66,78 @@ const ArtistHome = () => {
   };
 
   return (
-    <div style={styles.container}>
-      {/* Background gradient overlay */}
-      <div style={styles.backgroundOverlay}></div>
-
-      {/* Wave decorations */}
-      <img src={waveLeft} alt="" style={styles.waveLeft} />
-      <img src={waveRight} alt="" style={styles.waveRight} />
-
-      {/* Header */}
-      <div style={styles.header}>
-        <Link to="/home" style={styles.navLink}>Back to Home</Link>
-        <div style={styles.headerRight}>
-          <Link to={username ? `/@${username}` : '/profile'} style={styles.navLink}>Profile</Link>
-          <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
+    <div style={styles.pageWrapper}>
+      {/* Sidebar */}
+      <nav style={styles.sidebar}>
+        <div style={styles.sidebarTop}>
+          <Link to="/">
+            <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
+          </Link>
         </div>
-      </div>
 
-      <div style={styles.content}>
-        {/* Logo */}
-        <img src={sonaraLogo} alt="Sonara" style={styles.logo} />
+        <div style={styles.sidebarNav}>
+          <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🏠</span> Home
+          </Link>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🔥</span> Trending
+          </Link>
+          <Link to="/create" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+            <span style={styles.sidebarIcon}>🎵</span> Create Music
+          </Link>
+          <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+          </Link>
+          <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}>👤</span> Profile
+          </Link>
+        </div>
 
-        {/* Create New Track Button */}
-        <Link to="/workstation" style={styles.createButton}>
-          Create New Track
-        </Link>
+        <div style={styles.sidebarBottom}>
+          <Link to="/workstation" style={styles.uploadBtn}>Upload Track</Link>
+        </div>
+      </nav>
 
-        {/* My Projects Section */}
-        <div style={styles.projectsSection}>
-          <h2 style={styles.sectionTitle}>My Projects</h2>
+      {/* Main Area */}
+      <div style={styles.mainArea}>
+        <div style={styles.content}>
+          {/* Create New Track Button */}
+          <Link to="/workstation" style={styles.createButton}>
+            Create New Track
+          </Link>
 
-          <div style={styles.projectsList}>
-            {loading ? (
-              <p style={styles.emptyText}>Loading projects...</p>
-            ) : projects.length === 0 ? (
-              <p style={styles.emptyText}>No saved projects yet. Create your first track!</p>
-            ) : (
-              projects.map((project) => (
-                <Link
-                  key={project.id}
-                  to={`/workstation/${project.id}`}
-                  style={styles.projectCard}
-                >
-                  <div style={styles.projectInfo}>
-                    <span style={styles.projectTitle}>{project.name}</span>
-                    <span style={styles.projectDate}>{new Date(project.updated_at).toLocaleDateString()}</span>
-                  </div>
-                  <span style={styles.projectArrow}>→</span>
-                </Link>
-              ))
-            )}
+          {/* My Projects Section */}
+          <div style={styles.projectsSection}>
+            <h2 style={styles.sectionTitle}>My Projects</h2>
+
+            <div style={styles.projectsList}>
+              {loading ? (
+                <p style={styles.emptyText}>Loading projects...</p>
+              ) : projects.length === 0 ? (
+                <p style={styles.emptyText}>No saved projects yet. Create your first track!</p>
+              ) : (
+                projects.map((project) => (
+                  <Link
+                    key={project.id}
+                    to={`/workstation/${project.id}`}
+                    style={styles.projectCard}
+                  >
+                    <div style={styles.projectInfo}>
+                      <span style={styles.projectTitle}>{project.name}</span>
+                      <span style={styles.projectDate}>{new Date(project.updated_at).toLocaleDateString()}</span>
+                    </div>
+                    <span style={styles.projectArrow}>→</span>
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');
-        
+
         * {
           margin: 0;
           padding: 0;
@@ -134,100 +147,107 @@ const ArtistHome = () => {
         a:hover {
           opacity: 0.9;
         }
+
+        .sidebar-link:hover {
+          background: rgba(167,139,250,0.1);
+          color: #fff !important;
+        }
       `}</style>
     </div>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
-  container: {
+  pageWrapper: {
+    display: 'flex',
     minHeight: '100vh',
-    width: '100%',
-    background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%)',
+    background: '#0f0f1a',
+    fontFamily: "'Poppins', sans-serif",
+    color: '#ffffff',
+  },
+  sidebar: {
+    width: 240,
+    flexShrink: 0,
+    background: '#13131f',
+    borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    fontFamily: "'Poppins', sans-serif",
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  backgroundOverlay: {
-    position: 'absolute',
+    position: 'sticky',
     top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'radial-gradient(ellipse at 50% 0%, rgba(100, 100, 200, 0.1) 0%, transparent 50%)',
-    pointerEvents: 'none',
+    height: '100vh',
+    overflowY: 'auto',
   },
-  waveLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    height: '100%',
+  sidebarTop: {
+    padding: '24px 20px 16px',
+    borderBottom: '1px solid rgba(167,139,250,0.1)',
+  },
+  sidebarLogo: {
+    height: 36,
     width: 'auto',
-    maxWidth: '350px',
-    pointerEvents: 'none',
-    opacity: 0.8,
+    filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))',
   },
-  waveRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    height: '100%',
-    width: 'auto',
-    maxWidth: '350px',
-    pointerEvents: 'none',
-    opacity: 0.8,
-  },
-  header: {
-    width: '100%',
+  sidebarNav: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 40px',
-    zIndex: 10,
+    flexDirection: 'column',
+    gap: 4,
+    padding: '16px 12px',
+    flex: 1,
   },
-  headerRight: {
+  sidebarLink: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
-  },
-  navLink: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    gap: 12,
+    padding: '12px 16px',
+    borderRadius: 10,
+    color: 'rgba(255,255,255,0.6)',
     textDecoration: 'none',
-    fontSize: '14px',
+    fontSize: 14,
     fontWeight: 500,
-    transition: 'color 0.3s ease',
-  },
-  logoutButton: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 600,
-    fontFamily: "'Poppins', sans-serif",
-    background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 50%, #dd4a4a 100%)',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#ffffff',
+    transition: 'all 0.2s',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
+  },
+  sidebarLinkActive: {
+    color: '#ffffff',
+    background: 'rgba(167,139,250,0.15)',
+  },
+  sidebarIcon: {
+    fontSize: 18,
+    width: 24,
+    textAlign: 'center' as const,
+  },
+  sidebarBottom: {
+    padding: '16px 12px 24px',
+    borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  uploadBtn: {
+    display: 'block',
+    textAlign: 'center' as const,
+    padding: '12px 20px',
+    borderRadius: 9999,
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: 14,
+    textDecoration: 'none',
+    boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+    border: 'none',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  mainArea: {
+    flex: 1,
+    minWidth: 0,
+    overflowY: 'auto',
   },
   content: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    zIndex: 1,
-    padding: '20px',
+    padding: '60px 40px',
     width: '100%',
-    maxWidth: '600px',
-    flex: 1,
-  },
-  logo: {
-    width: '100%',
-    maxWidth: '280px',
-    height: 'auto',
-    marginBottom: '50px',
-    filter: 'drop-shadow(0 0 20px rgba(255, 255, 255, 0.3))',
+    maxWidth: '700px',
+    margin: '0 auto',
   },
   createButton: {
     width: '100%',
@@ -235,15 +255,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '20px',
     fontWeight: 600,
     fontFamily: "'Poppins', sans-serif",
-    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0096c7 100%)',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
     border: 'none',
     borderRadius: '12px',
     color: '#ffffff',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    boxShadow: '0 4px 20px rgba(0, 212, 255, 0.3)',
+    boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
     textDecoration: 'none',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: '40px',
   },
   projectsSection: {
@@ -268,8 +288,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '18px 24px',
-    backgroundColor: 'rgba(30, 45, 80, 0.6)',
-    border: '2px solid rgba(100, 150, 200, 0.3)',
+    backgroundColor: 'rgba(30,25,50,0.6)',
+    border: '2px solid rgba(167,139,250,0.3)',
     borderRadius: '12px',
     color: '#ffffff',
     textDecoration: 'none',
@@ -296,12 +316,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   projectArrow: {
     fontSize: '20px',
-    color: '#00d4ff',
+    color: '#a78bfa',
   },
   emptyText: {
     color: 'rgba(255, 255, 255, 0.5)',
     fontSize: '14px',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     padding: '40px 20px',
   },
 };
