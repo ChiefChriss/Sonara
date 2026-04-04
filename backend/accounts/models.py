@@ -191,6 +191,55 @@ class TrackLike(models.Model):
         return f"{self.user.username} ♡ {self.track.title}"
 
 
+class Notification(models.Model):
+    """A notification for a user — triggered by likes, follows, comments, reposts."""
+    LIKE_TRACK = 'like_track'
+    LIKE_PUBLICATION = 'like_publication'
+    FOLLOW = 'follow'
+    COMMENT = 'comment'
+    REPOST = 'repost'
+
+    TYPE_CHOICES = [
+        (LIKE_TRACK, 'Liked your track'),
+        (LIKE_PUBLICATION, 'Liked your publication'),
+        (FOLLOW, 'Followed you'),
+        (COMMENT, 'Commented on your song'),
+        (REPOST, 'Reposted your song'),
+    ]
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_notifications',
+    )
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    track = models.ForeignKey(
+        'Track',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    publication = models.ForeignKey(
+        'Publication',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} → {self.recipient.username}: {self.notification_type}"
+
+
 class Follow(models.Model):
     """A user following another user."""
     follower = models.ForeignKey(

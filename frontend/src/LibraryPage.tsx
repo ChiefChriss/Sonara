@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { usePlayerStore } from './stores/playerStore';
+import { useNotificationStore } from './stores/notificationStore';
+import { apiFetch } from './utils/api';
 
 interface LibraryItem {
     id: number;
@@ -24,6 +27,7 @@ const LibraryPage = () => {
     const [loading, setLoading] = useState(true);
     const [username, setUsername] = useState('');
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
+    const { unreadCount, startPolling } = useNotificationStore();
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
     useEffect(() => {
@@ -33,17 +37,14 @@ const LibraryPage = () => {
             if (!token) { navigate('/login'); return; }
             try {
                 // Fetch profile for username
-                const profileRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                const profileRes = await apiFetch('/api/auth/profile/');
                 if (profileRes.ok) {
                     const profileData = await profileRes.json();
                     setUsername(profileData.username);
                 }
+                startPolling();
 
-                const res = await fetch(`${API_BASE_URL}/api/auth/library/`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                const res = await apiFetch('/api/auth/library/');
                 if (res.ok) {
                     const data = await res.json();
                     const pubs: LibraryItem[] = (data.publications || []).map((p: any) => ({
@@ -137,19 +138,27 @@ const LibraryPage = () => {
                 </div>
                 <div style={styles.sidebarNav}>
                     <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#127968;</span> Home
+                        <span style={styles.sidebarIcon}><HomeIcon /></span> Home
                     </Link>
                     <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#128293;</span> Trending
+                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
                     </Link>
                     <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#127925;</span> Create Music
+                        <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
                     </Link>
                     <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-                        <span style={styles.sidebarIcon}>&#128722;</span> Marketplace
+                        <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
                     </div>
+                    <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+                        <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+                        {unreadCount > 0 && (
+                          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                            {unreadCount}
+                          </span>
+                        )}
+                    </Link>
                     <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#128100;</span> Profile
+                        <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
                     </Link>
                 </div>
                 <div style={styles.sidebarBottom}>

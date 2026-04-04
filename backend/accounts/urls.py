@@ -11,6 +11,8 @@ from .views import (
     TrackPlayView, ToggleTrackLikeView,
     TrendingTracksView, NewReleasesView,
     ToggleFollowView, FollowersListView, FollowingListView,
+    NotificationListView, NotificationUnreadCountView,
+    NotificationMarkReadView, NotificationMarkAllReadView,
 )
 
 urlpatterns = [
@@ -51,4 +53,10 @@ urlpatterns = [
     path('search/', SearchView.as_view(), name='search'),
     path('trending/', TrendingTracksView.as_view(), name='trending'),
     path('new-releases/', NewReleasesView.as_view(), name='new-releases'),
+
+    # Notifications
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/unread-count/', NotificationUnreadCountView.as_view(), name='notification-unread-count'),
+    path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
+    path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
 ]

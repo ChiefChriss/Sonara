@@ -13,6 +13,7 @@ import SearchPage from './SearchPage';
 import ExplorePage from './ExplorePage';
 import LibraryPage from './LibraryPage';
 import ContentPage from './ContentPage';
+import NotificationsPage from './NotificationsPage';
 import PlayerBar from './components/PlayerBar';
 
 
@@ -32,6 +33,7 @@ const App = () => {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/library" element={<LibraryPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/:type/:id" element={<ContentPage />} />
         <Route path="/workstation/:projectId?" element={<Workstation />} />
         <Route path="/:handle" element={<ProfilePage />} />

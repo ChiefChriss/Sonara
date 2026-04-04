@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
+import { apiFetch } from './utils/api';
+import { useNotificationStore } from './stores/notificationStore';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 
 // ── Interfaces (Chris) ──────────────────────────────────────────────────────
 
@@ -64,6 +67,7 @@ const ListenerHome = () => {
 
   // Chris: player store
   const globalPlayerState = usePlayerStore();
+  const { unreadCount, startPolling } = useNotificationStore();
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
   // ── Auth + data fetch (Chris) ─────────────────────────────────────────────
@@ -75,17 +79,11 @@ const ListenerHome = () => {
 
     const init = async () => {
       try {
-        const profileRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!profileRes.ok) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          navigate('/login');
-          return;
-        }
+        const profileRes = await apiFetch('/api/auth/profile/');
+        if (!profileRes.ok) return;
         const profileData = await profileRes.json();
         setUsername(profileData.username);
+        startPolling();
 
         const [trendRes, newRes, exploreRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/auth/trending/`),
@@ -293,19 +291,27 @@ const ListenerHome = () => {
 
         <nav style={styles.sidebarNav}>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-            <span style={styles.sidebarIcon}>🏠</span> Home
+            <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </div>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🔥</span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🎵</span> Create Music
+            <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
           <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
           </div>
+          <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+            <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+            {unreadCount > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                {unreadCount}
+              </span>
+            )}
+          </Link>
           <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>👤</span> Profile
+            <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
           </Link>
         </nav>
 

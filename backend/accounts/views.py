@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 import resend
 import os
 
-from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer
-from .models import Track, Project, Publication, Like, TrackLike, Follow
+from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer, NotificationSerializer
+from .models import Track, Project, Publication, Like, TrackLike, Follow, Notification
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 User = get_user_model()
@@ -378,6 +378,11 @@ class ToggleFollowView(APIView):
 
         follow, created = Follow.objects.get_or_create(follower=request.user, following=target)
         if created:
+            Notification.objects.create(
+                recipient=target,
+                sender=request.user,
+                notification_type=Notification.FOLLOW,
+            )
             return Response({'following': True, 'follower_count': target.followers_set.count()})
         else:
             follow.delete()
@@ -501,6 +506,14 @@ class ToggleLikeView(APIView):
             pub.like_count = db_models.F('like_count') + 1
             pub.save(update_fields=['like_count'])
             pub.refresh_from_db()
+            # Create notification (don't notify yourself)
+            if pub.user != request.user:
+                Notification.objects.create(
+                    recipient=pub.user,
+                    sender=request.user,
+                    notification_type=Notification.LIKE_PUBLICATION,
+                    publication=pub,
+                )
             return Response({'liked': True, 'like_count': pub.like_count})
         else:
             # Unlike
@@ -569,6 +582,14 @@ class ToggleTrackLikeView(APIView):
             track.like_count = db_models.F('like_count') + 1
             track.save(update_fields=['like_count'])
             track.refresh_from_db()
+            # Create notification (don't notify yourself)
+            if track.user != request.user:
+                Notification.objects.create(
+                    recipient=track.user,
+                    sender=request.user,
+                    notification_type=Notification.LIKE_TRACK,
+                    track=track,
+                )
             return Response({'liked': True, 'like_count': track.like_count})
         else:
             like.delete()
@@ -615,3 +636,50 @@ class NewReleasesView(APIView):
             'tracks': PublicTrackSerializer(new_tracks, many=True, context=ctx).data,
             'publications': PublicationSerializer(new_pubs, many=True, context=ctx).data,
         })
+
+
+# ═══════════════════════════════════════════
+# Notification endpoints
+# ═══════════════════════════════════════════
+
+class NotificationListView(APIView):
+    """List the authenticated user's notifications, newest first."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(
+            recipient=request.user
+        ).select_related('sender', 'track', 'publication')[:50]
+        return Response(NotificationSerializer(notifications, many=True).data)
+
+
+class NotificationUnreadCountView(APIView):
+    """Return the count of unread notifications."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+
+
+class NotificationMarkReadView(APIView):
+    """Mark a single notification as read."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            notification = Notification.objects.get(pk=pk, recipient=request.user)
+        except Notification.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        notification.is_read = True
+        notification.save(update_fields=['is_read'])
+        return Response({'status': 'ok'})
+
+
+class NotificationMarkAllReadView(APIView):
+    """Mark all notifications as read for the authenticated user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+        return Response({'status': 'ok'})

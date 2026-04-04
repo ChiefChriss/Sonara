@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.files.storage import default_storage
-from .models import Track, Project, Publication, Like, TrackLike
+from .models import Track, Project, Publication, Like, TrackLike, Notification
 
 User = get_user_model()
 
@@ -219,3 +219,22 @@ class PublicationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    sender_display_name = serializers.CharField(source='sender.display_name', read_only=True)
+    sender_profile_picture = serializers.ImageField(source='sender.profile_picture', read_only=True)
+    track_title = serializers.CharField(source='track.title', read_only=True, default=None)
+    track_id = serializers.IntegerField(source='track.id', read_only=True, default=None)
+    publication_title = serializers.CharField(source='publication.title', read_only=True, default=None)
+    publication_id = serializers.IntegerField(source='publication.id', read_only=True, default=None)
+
+    class Meta:
+        model = Notification
+        fields = (
+            'id', 'notification_type', 'is_read', 'created_at',
+            'sender_username', 'sender_display_name', 'sender_profile_picture',
+            'track_title', 'track_id', 'publication_title', 'publication_id',
+        )
+        read_only_fields = fields

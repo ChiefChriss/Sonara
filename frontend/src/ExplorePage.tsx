@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { usePlayerStore } from './stores/playerStore';
+import { useNotificationStore } from './stores/notificationStore';
+import { apiFetch } from './utils/api';
 
 interface Track {
   id: number;
@@ -38,6 +41,7 @@ const ExplorePage = () => {
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('');
   const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
+  const { unreadCount, startPolling } = useNotificationStore();
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
@@ -50,11 +54,12 @@ const ExplorePage = () => {
     const fetchProfile = async () => {
       if (!token) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/api/auth/profile/`, { headers });
+        const res = await apiFetch('/api/auth/profile/');
         if (res.ok) {
           const data = await res.json();
           setUsername(data.username);
         }
+        startPolling();
       } catch { /* silently fail */ }
     };
 
@@ -152,19 +157,27 @@ const ExplorePage = () => {
       </div>
       <div style={styles.sidebarNav as React.CSSProperties}>
         <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
-          <span style={styles.sidebarIcon as React.CSSProperties}>&#127968;</span> Home
+          <span style={styles.sidebarIcon as React.CSSProperties}><HomeIcon /></span> Home
         </Link>
         <Link to="/explore" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-          <span style={styles.sidebarIcon as React.CSSProperties}>&#128293;</span> Trending
+          <span style={styles.sidebarIcon as React.CSSProperties}><TrendingIcon /></span> Trending
         </Link>
         <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-          <span style={styles.sidebarIcon as React.CSSProperties}>&#127925;</span> Create Music
+          <span style={styles.sidebarIcon as React.CSSProperties}><MusicIcon /></span> Create Music
         </Link>
         <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-          <span style={styles.sidebarIcon as React.CSSProperties}>&#128722;</span> Marketplace
+          <span style={styles.sidebarIcon as React.CSSProperties}><MarketplaceIcon /></span> Marketplace
         </div>
+        <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+          <span style={styles.sidebarIcon as React.CSSProperties}><BellIcon /></span> Notifications
+          {unreadCount > 0 && (
+            <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+              {unreadCount}
+            </span>
+          )}
+        </Link>
         <Link to={profileLink} className="sidebar-link" style={styles.sidebarLink}>
-          <span style={styles.sidebarIcon as React.CSSProperties}>&#128100;</span> Profile
+          <span style={styles.sidebarIcon as React.CSSProperties}><ProfileIcon /></span> Profile
         </Link>
       </div>
       <div style={styles.sidebarBottom}>

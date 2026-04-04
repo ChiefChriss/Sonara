@@ -3,8 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import NotFound from './NotFound';
 import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
+import { useNotificationStore } from './stores/notificationStore';
+import { apiFetch } from './utils/api';
 import TrackEditModal from './components/TrackEditModal';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 
 interface UserProfile {
   id: number;
@@ -77,6 +80,7 @@ const ProfilePage = () => {
   const [loggedInUsername, setLoggedInUsername] = useState('');
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
+  const { unreadCount, startPolling } = useNotificationStore();
 
   const trackInputRef = useRef<HTMLInputElement>(null);
   const headerInputRef = useRef<HTMLInputElement>(null);
@@ -260,14 +264,13 @@ const ProfilePage = () => {
       let loggedInUsername: string | null = null;
       if (accessToken) {
         try {
-          const meRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          const meRes = await apiFetch('/api/auth/profile/');
           if (meRes.ok) {
             const meData = await meRes.json();
             loggedInUsername = meData.username;
             setLoggedInUsername(meData.username);
           }
+          startPolling();
         } catch { /* not logged in or token expired */ }
       }
 
@@ -435,19 +438,27 @@ const ProfilePage = () => {
 
         <nav style={styles.sidebarNav}>
           <Link to="/home" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🏠</span> Home
+            <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🔥</span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🎵</span> Create Music
+            <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
           <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
           </div>
+          <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+            <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+            {unreadCount > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                {unreadCount}
+              </span>
+            )}
+          </Link>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-            <span style={styles.sidebarIcon}>👤</span> Profile
+            <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
           </div>
         </nav>
 
@@ -1820,6 +1831,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
+    overflow: 'hidden',
   },
   followModal: {
     width: '100%',
@@ -1855,6 +1867,7 @@ const styles: Record<string, React.CSSProperties> = {
   followModalBody: {
     overflowY: 'auto' as const,
     flex: 1,
+    paddingRight: 4,
   },
   followUserRow: {
     display: 'flex',
