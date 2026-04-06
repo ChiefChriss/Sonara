@@ -9,6 +9,7 @@ import TrackEditModal from './components/TrackEditModal';
 import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
+import { getUserGradient } from './utils/userGradient';
 
 interface UserProfile {
   id: number;
@@ -486,7 +487,7 @@ const ProfilePage = () => {
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -581,7 +582,7 @@ const ProfilePage = () => {
                   ...styles.editCover,
                   ...(getHeaderImageUrl()
                     ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-                    : {}),
+                    : { background: getUserGradient(user?.username || '') }),
                 }}
               >
                 {getHeaderImageUrl() && <div style={styles.coverGradient} />}
@@ -610,12 +611,6 @@ const ProfilePage = () => {
                     </button>
                   )}
                 </div>
-                {!getHeaderImageUrl() && (
-                  <div style={styles.coverPlaceholder}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                    <span>Add cover photo</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -750,16 +745,10 @@ const ProfilePage = () => {
             ...styles.cover,
             ...(getHeaderImageUrl()
               ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-              : {}),
+              : { background: getUserGradient(user?.username || '') }),
           }}
         >
           {getHeaderImageUrl() && <div style={styles.coverGradient} />}
-          {!getHeaderImageUrl() && (
-            <div style={styles.coverPlaceholder}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-              <span>No cover photo</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1018,7 +1007,7 @@ const ProfilePage = () => {
       {cropTarget && cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
-          aspect={cropTarget === 'pfp' ? 1 : 16 / 9}
+          aspect={cropTarget === 'pfp' ? 1 : 5.15}
           cropShape={cropTarget === 'pfp' ? 'round' : 'rect'}
           onCropComplete={(blob) => {
             const ext = blob.type === 'image/png' ? '.png' : '.jpg';
@@ -1125,10 +1114,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
-    position: 'sticky' as const,
+    position: 'fixed' as const,
     top: 0,
-    height: '100vh',
-    overflowY: 'auto' as const,
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -1194,6 +1185,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto' as const,
+    marginLeft: 240,
+    height: '100vh',
   },
   loadingWrap: {
     display: 'flex',
@@ -1244,7 +1237,9 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 20px rgba(167, 139, 250, 0.3)',
   },
   coverWrap: {
-    width: '100%',
+    maxWidth: '1330px',
+    margin: '0 auto',
+    padding: '24px 24px 0',
     position: 'relative',
     zIndex: 1,
   },
@@ -1257,7 +1252,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottom: '1px solid rgba(167, 139, 250, 0.2)',
+    borderRadius: '16px',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1366,7 +1361,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editCover: {
     width: '100%',
-    height: '200px',
+    aspectRatio: '5.15',
     background: 'linear-gradient(135deg, rgba(19, 19, 31, 0.9) 0%, rgba(30, 25, 50, 0.7) 50%, rgba(40, 20, 60, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
@@ -1489,14 +1484,14 @@ const styles: Record<string, React.CSSProperties> = {
   main: {
     maxWidth: '1280px',
     margin: '0 auto',
-    marginTop: '-60px',
+    marginTop: '-9px',
     position: 'relative',
     zIndex: 1,
     paddingLeft: '24px',
     paddingRight: '24px',
     borderLeft: '1px solid rgba(167, 139, 250, 0.15)',
     borderRight: '1px solid rgba(167, 139, 250, 0.15)',
-    minHeight: 'calc(100vh - 53px - 230px + 60px)',
+    minHeight: 'calc(100vh - 53px + 284px)',
   },
   coverPlaceholder: {
     display: 'flex',
@@ -1523,7 +1518,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     border: '4px solid #0f0f1a',
-    marginTop: '-60px',
+    marginTop: '-70px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

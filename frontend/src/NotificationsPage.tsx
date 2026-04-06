@@ -4,6 +4,7 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
+import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
 
 interface Notification {
@@ -24,6 +25,7 @@ type TabFilter = 'all' | 'likes' | 'follows' | 'comments';
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
+  const { currentTrack } = usePlayerStore();
   const [username, setUsername] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadIds, setUnreadIds] = useState<Set<number>>(new Set());
@@ -227,7 +229,7 @@ const NotificationsPage = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <aside style={styles.sidebar}>
+      <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -262,10 +264,6 @@ const NotificationsPage = () => {
 
       {/* Main area */}
       <div style={styles.mainArea}>
-        <header style={styles.topBar}>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Notifications</h1>
-        </header>
-
         <div style={styles.contentWrapper}>
           <div style={styles.mainContent}>
             {/* Tabs */}
@@ -403,10 +401,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -471,19 +471,9 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-  },
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 64,
-    padding: '0 32px',
-    background: 'rgba(19,19,31,0.92)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(167,139,250,0.12)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
+    marginLeft: 240,
+    height: '100vh',
+    overflowY: 'auto',
   },
   contentWrapper: {
     flex: 1,

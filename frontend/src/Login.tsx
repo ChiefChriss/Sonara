@@ -105,6 +105,7 @@ const Login = () => {
               />
               <button
                 type="button"
+                className="eye-toggle"
                 onClick={() => setShowPassword(!showPassword)}
                 style={styles.eyeToggle}
                 tabIndex={-1}
@@ -159,10 +160,28 @@ const Login = () => {
           border-color: #00d4ff;
           box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
         }
+
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+          -webkit-text-fill-color: #ffffff !important;
+          -webkit-box-shadow: 0 0 0 1000px #1a1533 inset !important;
+          box-shadow: 0 0 0 1000px #1a1533 inset !important;
+          border-color: rgba(100, 150, 200, 0.3) !important;
+          transition: background-color 5000s ease-in-out 0s;
+          caret-color: #ffffff;
+          cursor: text;
+        }
         
         button:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 30px rgba(0, 212, 255, 0.5);
+        }
+
+        .eye-toggle:hover {
+          transform: translateY(-50%) !important;
+          box-shadow: none !important;
+          opacity: 1 !important;
         }
         
         button:active {
@@ -264,6 +283,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     transition: 'opacity 0.2s',
     opacity: 0.7,
+    zIndex: 2,
   },
   input: {
     width: '100%',

@@ -130,7 +130,7 @@ const LibraryPage = () => {
       `}</style>
 
             {/* ── Sidebar ── */}
-            <nav style={styles.sidebar}>
+            <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
                 <div style={styles.sidebarTop}>
                     <Link to="/home">
                         <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -284,7 +284,7 @@ const styles: Record<string, React.CSSProperties> = {
     pageWrapper: { display: 'flex', minHeight: '100vh', background: '#0f0f1a', fontFamily: "'Poppins', sans-serif", color: '#ffffff' },
 
     // ── Sidebar ──
-    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'sticky' as const, top: 0, height: '100vh', overflowY: 'auto' as const },
+    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'fixed' as const, top: 0, left: 0, bottom: 0, overflow: 'hidden', zIndex: 100 },
     sidebarTop: { padding: '24px 20px 16px', borderBottom: '1px solid rgba(167,139,250,0.1)' },
     sidebarLogo: { height: 36, width: 'auto', filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))' },
     sidebarNav: { display: 'flex', flexDirection: 'column' as const, gap: 4, padding: '16px 12px', flex: 1 },
@@ -294,7 +294,7 @@ const styles: Record<string, React.CSSProperties> = {
     uploadBtn: { display: 'block', textAlign: 'center' as const, padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
 
     // ── Main area ──
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const, marginLeft: 240, height: '100vh' },
     main: { maxWidth: '960px', margin: '0 auto', padding: '32px 24px', position: 'relative' as const, zIndex: 1 },
     pageTitle: { fontSize: '24px', fontWeight: 700, marginBottom: '16px' },
     subtitle: { fontSize: '14px', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' },

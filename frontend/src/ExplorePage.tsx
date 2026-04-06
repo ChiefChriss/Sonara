@@ -149,7 +149,7 @@ const ExplorePage = () => {
 
   /* ── Sidebar (shared layout) ─────────────────────────────────────────────── */
   const renderSidebar = () => (
-    <nav style={styles.sidebar}>
+    <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
       <div style={styles.sidebarTop}>
         <Link to="/home">
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -345,10 +345,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
-    position: 'sticky' as const,
+    position: 'fixed' as const,
     top: 0,
-    height: '100vh',
-    overflowY: 'auto' as const,
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -412,6 +414,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto' as const,
+    marginLeft: 240,
+    height: '100vh',
   },
 
   /* ── Content area ────────────────────────────────────────────────────────── */

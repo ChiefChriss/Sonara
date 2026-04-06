@@ -26,7 +26,7 @@ const PlayerBar = () => {
     );
 
     const authRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/'];
-    if (authRoutes.includes(location.pathname) || !currentTrack) return null;
+    if (authRoutes.includes(location.pathname) || location.pathname.startsWith('/workstation') || !currentTrack) return null;
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     const gradientInnerPct = progress > 0 ? Math.min(50000, 10000 / Math.max(progress, 0.02)) : 0;
@@ -34,16 +34,29 @@ const PlayerBar = () => {
     return (
         <>
             <style>{`
-        body { padding-bottom: 72px; }
         .player-bar-progress:hover { height: 6px !important; }
         .player-bar-progress:hover .progress-thumb { opacity: 1 !important; }
         .player-vol-slider::-webkit-slider-thumb {
           -webkit-appearance: none; width: 12px; height: 12px;
           border-radius: 50%; background: #fff; cursor: pointer; margin-top: -4px;
+          box-shadow: 0 0 6px rgba(0,212,255,0.4);
         }
         .player-vol-slider::-webkit-slider-runnable-track {
           height: 4px; border-radius: 2px;
           background: linear-gradient(to right, rgba(0,212,255,0.8) 0%, rgba(0,212,255,0.8) var(--vol-pct), rgba(255,255,255,0.2) var(--vol-pct), rgba(255,255,255,0.2) 100%);
+        }
+        .player-vol-slider::-moz-range-thumb {
+          width: 12px; height: 12px; border: none;
+          border-radius: 50%; background: #fff; cursor: pointer;
+          box-shadow: 0 0 6px rgba(0,212,255,0.4);
+        }
+        .player-vol-slider::-moz-range-track {
+          height: 4px; border-radius: 2px; border: none;
+          background: rgba(255,255,255,0.2);
+        }
+        .player-vol-slider::-moz-range-progress {
+          height: 4px; border-radius: 2px;
+          background: rgba(0,212,255,0.8);
         }
       `}</style>
             <div style={styles.bar}>
@@ -168,10 +181,8 @@ const PlayerBar = () => {
 
 const styles: Record<string, React.CSSProperties> = {
     bar: {
-        position: 'fixed',
+        position: 'sticky',
         bottom: 0,
-        left: 0,
-        right: 0,
         height: '72px',
         background: 'rgba(10, 10, 26, 0.96)',
         backdropFilter: 'blur(20px)',

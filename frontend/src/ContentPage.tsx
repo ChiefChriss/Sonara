@@ -192,7 +192,7 @@ const ContentPage = () => {
     }, [type, id, API_BASE_URL]);
 
     const sidebar = (
-        <aside style={styles.sidebar}>
+        <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
             <style>{`.sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }`}</style>
             <div style={styles.sidebarTop}>
                 <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -809,10 +809,12 @@ const styles: Record<string, React.CSSProperties> = {
         borderRight: '1px solid rgba(167,139,250,0.15)',
         display: 'flex',
         flexDirection: 'column',
-        position: 'sticky',
+        position: 'fixed',
         top: 0,
-        height: '100vh',
-        overflowY: 'auto',
+        left: 0,
+        bottom: 0,
+        overflow: 'hidden',
+        zIndex: 100,
     },
     sidebarTop: { padding: '24px 20px 16px', borderBottom: '1px solid rgba(167,139,250,0.1)' },
     sidebarLogo: { height: 36, width: 'auto', filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))' },
@@ -821,7 +823,7 @@ const styles: Record<string, React.CSSProperties> = {
     sidebarIcon: { fontSize: 18, width: 24, textAlign: 'center' },
     sidebarBottom: { padding: '16px 12px 24px', borderTop: '1px solid rgba(167,139,250,0.1)' },
     uploadBtn: { display: 'block', textAlign: 'center', padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto', marginLeft: 240, height: '100vh' },
 
     // ── Content styles ────────────────────────────────────────────────────────
     loadingWrap: {

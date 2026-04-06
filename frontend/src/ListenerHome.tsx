@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
@@ -22,14 +22,6 @@ interface Track {
   like_count?: number;
   uploaded_at?: string;
   published_at?: string;
-}
-
-interface SearchUser {
-  id: number;
-  username: string;
-  profile_picture: string | null;
-  bio: string;
-  role: string;
 }
 
 interface FollowingRepostItem {
@@ -70,22 +62,12 @@ const getGradient = (id: number) => CARD_GRADIENTS[id % CARD_GRADIENTS.length];
 const ListenerHome = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
-
   // Chris: real API data
   const [trending, setTrending] = useState<Track[]>([]);
   const [newReleases, setNewReleases] = useState<Track[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [followingReposts, setFollowingReposts] = useState<FollowingRepostItem[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
-
-  // Chris: search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchUsers, setSearchUsers] = useState<SearchUser[]>([]);
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   // Chris: player store
   const globalPlayerState = usePlayerStore();
@@ -140,43 +122,6 @@ const ListenerHome = () => {
     init();
   }, [navigate, API_BASE_URL]);
 
-  // ── Close search dropdown on outside click (Chris) ────────────────────────
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node))
-        setSearchOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  // ── Search logic (Chris) ──────────────────────────────────────────────────
-
-  const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setSearchUsers([]); setSearchResults([]); setSearchOpen(false); return; }
-    setSearching(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/search/?q=${encodeURIComponent(q)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSearchUsers(data.users || []);
-        setSearchResults([
-          ...(data.publications || []).map((p: any) => ({ ...p, type: 'publication' as const })),
-          ...(data.tracks || []).map((t: any) => ({ ...t, type: 'track' as const })),
-        ]);
-        setSearchOpen(true);
-      }
-    } catch { /* silent */ } finally { setSearching(false); }
-  }, [API_BASE_URL]);
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!value.trim()) { setSearchUsers([]); setSearchResults([]); setSearchOpen(false); return; }
-    searchTimerRef.current = setTimeout(() => runSearch(value), 300);
-  };
-
   // ── Playback helpers (Chris) ──────────────────────────────────────────────
 
   const playTrack = (item: Track) => {
@@ -199,16 +144,6 @@ const ListenerHome = () => {
   const formatCount = (n?: number) => {
     if (!n) return '0';
     return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-  };
-
-  // ── Logout (Chris: stops player) ──────────────────────────────────────────
-
-  const handleLogout = () => {
-    usePlayerStore.getState().stop();
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('username');
-    navigate('/login');
   };
 
   // ── Sub-components ────────────────────────────────────────────────────────
@@ -393,7 +328,7 @@ const ListenerHome = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* ── Sidebar (Tony) ──────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside style={{...styles.sidebar, bottom: globalPlayerState.currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -433,83 +368,6 @@ const ListenerHome = () => {
 
       {/* ── Main area ───────────────────────────────────────────────────────── */}
       <div style={styles.mainArea}>
-        {/* ── Top bar (Tony layout + Chris search) ────────────────────────── */}
-        <header style={styles.topBar}>
-          <div ref={searchWrapRef} style={styles.searchWrap}>
-            <input
-              type="text"
-              placeholder="Search tracks or artists..."
-              style={styles.searchInput}
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchQuery.trim()) {
-                  setSearchOpen(false);
-                  navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                }
-              }}
-              onFocus={() => { if (searchResults.length > 0 || searchUsers.length > 0) setSearchOpen(true); }}
-            />
-            {searching && <span style={styles.searchSpinner}>...</span>}
-
-            {/* ── Search dropdown (Chris) ──────────────────────────────────── */}
-            {searchOpen && (searchUsers.length > 0 || searchResults.length > 0) && (
-              <div style={styles.searchDropdown}>
-                {searchUsers.length > 0 && (
-                  <>
-                    <div style={styles.dropLabel}>People</div>
-                    {searchUsers.map((u) => (
-                      <div
-                        key={`u-${u.id}`}
-                        style={styles.dropRow}
-                        onClick={() => { setSearchOpen(false); navigate(`/@${u.username}`); }}
-                      >
-                        {u.profile_picture
-                          ? <img src={u.profile_picture} alt="" style={styles.dropAvatar} />
-                          : <div style={styles.dropAvatarPh}>👤</div>}
-                        <div>
-                          <div style={styles.dropName}>{u.username}</div>
-                          <div style={styles.dropSub}>{u.role === 'both' ? 'Listener & Creator' : u.role}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {searchResults.length > 0 && (
-                  <>
-                    <div style={styles.dropLabel}>Tracks & Posts</div>
-                    {searchResults.map((r) => (
-                      <div key={`r-${r.type}-${r.id}`} style={styles.dropRow}>
-                        <button style={styles.dropPlayBtn} onClick={() => playTrack(r)}>▶</button>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={styles.dropName}>{r.title}</div>
-                          <div
-                            style={styles.dropSub}
-                            onClick={() => { setSearchOpen(false); navigate(`/@${r.username}`); }}
-                          >
-                            @{r.username}
-                          </div>
-                        </div>
-                        <span style={{ ...styles.dropTag, ...(r.type === 'publication' ? styles.dropTagPub : {}) }}>
-                          {r.type === 'publication' ? 'POST' : 'TRACK'}
-                        </span>
-                      </div>
-                    ))}
-                  </>
-                )}
-                <div
-                  style={styles.dropSeeAll}
-                  onClick={() => { setSearchOpen(false); navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`); }}
-                >
-                  See all results
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
-        </header>
-
         {/* ── Hero banner (Tony) ──────────────────────────────────────────── */}
         <div style={styles.heroBanner}>
           <div style={styles.heroOverlay} />
@@ -699,10 +557,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -769,149 +629,9 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-  },
-
-  // ── Top bar ───────────────────────────────────────────────────────────────
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 64,
-    padding: '0 32px',
-    background: 'rgba(19,19,31,0.92)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(167,139,250,0.12)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
-  },
-  searchWrap: {
-    position: 'relative',
-    flex: 1,
-    maxWidth: 480,
-  },
-  searchInput: {
-    width: '100%',
-    padding: '10px 20px',
-    borderRadius: 12,
-    border: '1.5px solid rgba(167,139,250,0.3)',
-    background: 'rgba(28,28,46,0.8)',
-    color: 'white',
-    fontSize: 14,
-    fontFamily: "'Poppins', sans-serif",
-    transition: 'all 0.3s ease',
-  },
-  searchSpinner: {
-    position: 'absolute',
-    right: 14,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
-    pointerEvents: 'none',
-  },
-  searchDropdown: {
-    position: 'absolute',
-    top: 'calc(100% + 6px)',
-    left: 0,
-    right: 0,
-    maxHeight: 360,
+    marginLeft: 240,
+    height: '100vh',
     overflowY: 'auto',
-    background: 'rgba(19,19,31,0.97)',
-    border: '1px solid rgba(167,139,250,0.25)',
-    borderRadius: 12,
-    zIndex: 100,
-    backdropFilter: 'blur(16px)',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-  },
-  dropLabel: {
-    padding: '8px 14px 4px',
-    fontSize: 11,
-    fontWeight: 700,
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  dropRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '9px 14px',
-    cursor: 'pointer',
-    transition: 'background 0.1s',
-    borderBottom: '1px solid rgba(167,139,250,0.08)',
-  },
-  dropAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: '50%',
-    objectFit: 'cover',
-    flexShrink: 0,
-  },
-  dropAvatarPh: {
-    width: 34,
-    height: 34,
-    borderRadius: '50%',
-    background: 'rgba(28,28,46,0.8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 15,
-    flexShrink: 0,
-  },
-  dropName: { fontSize: 13, fontWeight: 600, color: '#fff' },
-  dropSub: { fontSize: 11, color: 'rgba(255,255,255,0.45)', cursor: 'pointer' },
-  dropPlayBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: '50%',
-    border: 'none',
-    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
-    color: '#fff',
-    fontSize: 11,
-    cursor: 'pointer',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dropTag: {
-    fontSize: 10,
-    fontWeight: 600,
-    padding: '2px 7px',
-    borderRadius: 6,
-    background: 'rgba(167,139,250,0.25)',
-    color: 'rgba(255,255,255,0.7)',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  dropTagPub: {
-    background: 'rgba(236,72,153,0.3)',
-    color: 'rgba(236,72,153,0.9)',
-  },
-  dropSeeAll: {
-    padding: '10px 14px',
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#a78bfa',
-    cursor: 'pointer',
-    borderTop: '1px solid rgba(167,139,250,0.12)',
-  },
-  logoutButton: {
-    padding: '10px 24px',
-    borderRadius: 9999,
-    border: 'none',
-    background: 'linear-gradient(135deg, #ff6b6b, #dd4a4a)',
-    color: 'white',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: "'Poppins', sans-serif",
-    boxShadow: '0 3px 12px rgba(255,100,100,0.25)',
-    transition: 'all 0.2s',
-    marginLeft: 16,
-    flexShrink: 0,
   },
 
   // ── Hero banner (Tony) ────────────────────────────────────────────────────

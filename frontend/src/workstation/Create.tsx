@@ -18,6 +18,7 @@ const ArtistHome = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('');
+  const { currentTrack } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
   useEffect(() => {
@@ -71,7 +72,7 @@ const ArtistHome = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <nav style={styles.sidebar}>
+      <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -183,10 +184,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -250,6 +253,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto',
+    marginLeft: 240,
+    height: '100vh',
   },
   content: {
     display: 'flex',

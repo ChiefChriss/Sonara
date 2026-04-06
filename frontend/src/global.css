@@ -1,0 +1,46 @@
+/* ── Hide scrollbar on body (scroll lives in .main-area instead) ──────── */
+html, body {
+  overflow: hidden;
+  height: 100vh;
+  margin: 0;
+}
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a78bfa 0%, #6366f1 40%, #ec4899 100%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #c4b5fd 0%, #818cf8 40%, #f472b6 100%);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #ddd6fe 0%, #a5b4fc 40%, #f9a8d4 100%);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #7c3aed transparent;
+}

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { useNotificationStore } from './stores/notificationStore';
+import { usePlayerStore } from './stores/playerStore';
 
 interface SearchUser {
   id: number;
@@ -35,6 +36,7 @@ interface SearchPublication {
 
 const SearchPage = () => {
   const navigate = useNavigate();
+  const { currentTrack } = usePlayerStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
 
@@ -143,7 +145,7 @@ const SearchPage = () => {
       `}</style>
 
       {/* Sidebar */}
-      <nav style={styles.sidebar}>
+      <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/home">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -352,10 +354,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -415,6 +419,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto',
+    marginLeft: 240,
+    height: '100vh',
   },
   searchBarSection: {
     position: 'sticky',
