@@ -1,0 +1,35 @@
+# Web framework
+Django>=6.0.1
+
+# WSGI server (production)
+gunicorn
+
+# Environment variables
+python-dotenv
+
+# REST API
+djangorestframework
+
+# CORS headers
+django-cors-headers
+
+# JWT authentication
+djangorestframework-simplejwt
+
+# Email sending (transactional)
+resend
+
+# Rate limiting
+django-ratelimit
+
+# Image processing (profile pictures, cover art)
+Pillow
+
+# Cloud file storage (production media via Cloudinary)
+django-storages
+django-cloudinary-storage
+cloudinary
+
+# PostgreSQL support + DATABASE_URL parsing
+dj-database-url
+psycopg2-binary

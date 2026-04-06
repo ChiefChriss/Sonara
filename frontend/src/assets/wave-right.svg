@@ -1,0 +1,78 @@
+<svg viewBox="0 0 400 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="waveGradientR1" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.05)" />
+    </linearGradient>
+    <linearGradient id="waveGradientR2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(233,69,96,0.2)" />
+      <stop offset="100%" stop-color="rgba(155,89,182,0.1)" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main flowing wave -->
+  <path 
+    d="M450,100 
+       Q320,150 340,250 
+       T300,400 
+       T350,550 
+       T280,700 
+       T320,850" 
+    fill="none" 
+    stroke="url(#waveGradientR1)" 
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+  
+  <!-- Secondary wave -->
+  <path 
+    d="M430,50 
+       Q300,120 330,220 
+       T270,380 
+       T340,520 
+       T260,680 
+       T310,820" 
+    fill="none" 
+    stroke="url(#waveGradientR2)" 
+    stroke-width="1.5"
+    stroke-linecap="round"
+  />
+  
+  <!-- Accent curve 1 -->
+  <path 
+    d="M380,300 
+       Q310,350 330,450 
+       T300,600" 
+    fill="none" 
+    stroke="rgba(255,255,255,0.1)" 
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+  
+  <!-- Small accent circles -->
+  <circle cx="340" cy="250" r="8" fill="rgba(233,69,96,0.2)" />
+  <circle cx="300" cy="500" r="5" fill="rgba(255,255,255,0.15)" />
+  <circle cx="360" cy="650" r="6" fill="rgba(155,89,182,0.15)" />
+  
+  <!-- Flowing accent -->
+  <path 
+    d="M400,200 
+       Q340,230 350,300 
+       T320,400" 
+    fill="none" 
+    stroke="rgba(233,69,96,0.15)" 
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+  
+  <!-- Deep curve -->
+  <path 
+    d="M420,500 
+       Q280,550 320,650 
+       T250,800" 
+    fill="none" 
+    stroke="rgba(255,255,255,0.08)" 
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+</svg>
