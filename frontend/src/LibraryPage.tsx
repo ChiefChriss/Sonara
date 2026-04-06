@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { usePlayerStore } from './stores/playerStore';
+import { useNotificationStore } from './stores/notificationStore';
+import { apiFetch } from './utils/api';
+import { getTrackGradient } from './utils/trackGradient';
 
 interface LibraryItem {
     id: number;
@@ -24,6 +28,7 @@ const LibraryPage = () => {
     const [loading, setLoading] = useState(true);
     const [username, setUsername] = useState('');
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
+    const { unreadCount, startPolling } = useNotificationStore();
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
     useEffect(() => {
@@ -33,17 +38,14 @@ const LibraryPage = () => {
             if (!token) { navigate('/login'); return; }
             try {
                 // Fetch profile for username
-                const profileRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                const profileRes = await apiFetch('/api/auth/profile/');
                 if (profileRes.ok) {
                     const profileData = await profileRes.json();
                     setUsername(profileData.username);
                 }
+                startPolling();
 
-                const res = await fetch(`${API_BASE_URL}/api/auth/library/`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
+                const res = await apiFetch('/api/auth/library/');
                 if (res.ok) {
                     const data = await res.json();
                     const pubs: LibraryItem[] = (data.publications || []).map((p: any) => ({
@@ -129,7 +131,7 @@ const LibraryPage = () => {
       `}</style>
 
             {/* ── Sidebar ── */}
-            <nav style={styles.sidebar}>
+            <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
                 <div style={styles.sidebarTop}>
                     <Link to="/home">
                         <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -137,19 +139,27 @@ const LibraryPage = () => {
                 </div>
                 <div style={styles.sidebarNav}>
                     <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#127968;</span> Home
+                        <span style={styles.sidebarIcon}><HomeIcon /></span> Home
                     </Link>
                     <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#128293;</span> Trending
+                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
                     </Link>
                     <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#127925;</span> Create Music
+                        <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
                     </Link>
                     <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-                        <span style={styles.sidebarIcon}>&#128722;</span> Marketplace
+                        <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
                     </div>
+                    <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+                        <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+                        {unreadCount > 0 && (
+                          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                            {unreadCount}
+                          </span>
+                        )}
+                    </Link>
                     <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}>&#128100;</span> Profile
+                        <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
                     </Link>
                 </div>
                 <div style={styles.sidebarBottom}>
@@ -216,9 +226,7 @@ const LibraryPage = () => {
                                         {item.cover_image ? (
                                             <img src={item.cover_image} alt="" style={styles.coverImg} />
                                         ) : (
-                                            <div style={styles.coverPlaceholder}>
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                                            </div>
+                                            <div style={{ ...styles.coverPlaceholder, background: getTrackGradient(item.id) }} />
                                         )}
                                         <div style={styles.titleInfo}>
                                             <span style={styles.songTitle}>{item.title}</span>
@@ -275,7 +283,7 @@ const styles: Record<string, React.CSSProperties> = {
     pageWrapper: { display: 'flex', minHeight: '100vh', background: '#0f0f1a', fontFamily: "'Poppins', sans-serif", color: '#ffffff' },
 
     // ── Sidebar ──
-    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'sticky' as const, top: 0, height: '100vh', overflowY: 'auto' as const },
+    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'fixed' as const, top: 0, left: 0, bottom: 0, overflow: 'hidden', zIndex: 100 },
     sidebarTop: { padding: '24px 20px 16px', borderBottom: '1px solid rgba(167,139,250,0.1)' },
     sidebarLogo: { height: 36, width: 'auto', filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))' },
     sidebarNav: { display: 'flex', flexDirection: 'column' as const, gap: 4, padding: '16px 12px', flex: 1 },
@@ -285,7 +293,7 @@ const styles: Record<string, React.CSSProperties> = {
     uploadBtn: { display: 'block', textAlign: 'center' as const, padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
 
     // ── Main area ──
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const, marginLeft: 240, height: 'calc(100vh - 64px)' },
     main: { maxWidth: '960px', margin: '0 auto', padding: '32px 24px', position: 'relative' as const, zIndex: 1 },
     pageTitle: { fontSize: '24px', fontWeight: 700, marginBottom: '16px' },
     subtitle: { fontSize: '14px', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' },

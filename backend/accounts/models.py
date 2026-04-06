@@ -1,3 +1,4 @@
+import os
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
@@ -5,6 +6,13 @@ from django.core.exceptions import ValidationError
 from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
 from cloudinary_storage.storage import RawMediaCloudinaryStorage
+
+
+def _get_audio_storage():
+    """Use Cloudinary in production, local filesystem in dev."""
+    if os.environ.get('CLOUDINARY_CLOUD_NAME'):
+        return RawMediaCloudinaryStorage()
+    return None  # Django default (FileSystemStorage)
 
 
 def validate_image_size(file):
@@ -69,7 +77,7 @@ class Track(models.Model):
     title = models.CharField(max_length=255)
     audio_file = models.FileField(
         upload_to='tracks/',
-        storage=RawMediaCloudinaryStorage(),
+        storage=_get_audio_storage(),
         validators=[validate_audio_size],
     )
     cover_image = models.ImageField(
@@ -81,12 +89,35 @@ class Track(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     play_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)
+    repost_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-uploaded_at']
 
     def __str__(self):
         return f"{self.title} — {self.user.username}"
+
+
+class TrackRepost(models.Model):
+    """User reshared someone else's track onto their profile."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='track_reposts',
+    )
+    track = models.ForeignKey(
+        Track,
+        on_delete=models.CASCADE,
+        related_name='reposts',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'track')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} reposted {self.track_id}"
 
 
 class Project(models.Model):
@@ -126,7 +157,7 @@ class Publication(models.Model):
     description = models.TextField(blank=True, default='')
     audio_file = models.FileField(
         upload_to='publications/',
-        storage=RawMediaCloudinaryStorage(),
+        storage=_get_audio_storage(),
         validators=[validate_audio_size],
     )
     cover_image = models.ImageField(
@@ -189,6 +220,136 @@ class TrackLike(models.Model):
 
     def __str__(self):
         return f"{self.user.username} ♡ {self.track.title}"
+
+
+class ContentComment(models.Model):
+    """User comment on a track or publication (exactly one target)."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='content_comments',
+    )
+    track = models.ForeignKey(
+        'Track',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='comments',
+    )
+    publication = models.ForeignKey(
+        'Publication',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='comments',
+    )
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies',
+    )
+    body = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(track__isnull=False, publication__isnull=True)
+                    | models.Q(track__isnull=True, publication__isnull=False)
+                ),
+                name='contentcomment_exactly_one_target',
+            ),
+        ]
+
+    def __str__(self):
+        if self.track_id:
+            return f"{self.user.username} on track {self.track_id}"
+        return f"{self.user.username} on publication {self.publication_id}"
+
+
+class ContentCommentLike(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='content_comment_likes',
+    )
+    comment = models.ForeignKey(
+        ContentComment,
+        on_delete=models.CASCADE,
+        related_name='comment_likes',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'comment')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} ♡ comment {self.comment_id}"
+
+
+class Notification(models.Model):
+    """A notification for a user — triggered by likes, follows, comments, reposts."""
+    LIKE_TRACK = 'like_track'
+    LIKE_PUBLICATION = 'like_publication'
+    FOLLOW = 'follow'
+    COMMENT = 'comment'
+    COMMENT_REPLY = 'comment_reply'
+    REPOST = 'repost'
+    MENTION = 'mention'
+
+    TYPE_CHOICES = [
+        (LIKE_TRACK, 'Liked your track'),
+        (LIKE_PUBLICATION, 'Liked your publication'),
+        (FOLLOW, 'Followed you'),
+        (COMMENT, 'Commented on your song'),
+        (COMMENT_REPLY, 'Replied to your comment'),
+        (REPOST, 'Reposted your song'),
+        (MENTION, 'Mentioned you in a comment'),
+    ]
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_notifications',
+    )
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    track = models.ForeignKey(
+        'Track',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    publication = models.ForeignKey(
+        'Publication',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    comment = models.ForeignKey(
+        'ContentComment',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.sender.username} → {self.recipient.username}: {self.notification_type}"
 
 
 class Follow(models.Model):

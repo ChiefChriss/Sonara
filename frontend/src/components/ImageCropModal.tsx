@@ -51,6 +51,9 @@ const ImageCropModal = ({
     return (
         <div style={styles.overlay}>
             <style>{`
+        .reactEasyCrop_CropArea[style*="border-radius: 0"] {
+          border-radius: 12px !important;
+        }
         .crop-zoom-slider {
           -webkit-appearance: none;
           appearance: none;
@@ -180,7 +183,7 @@ const styles: Record<string, React.CSSProperties> = {
     cropContainer: {
         position: 'relative',
         width: '100%',
-        height: '380px',
+        height: '340px',
         background: '#0a0a1a',
     },
     controls: {

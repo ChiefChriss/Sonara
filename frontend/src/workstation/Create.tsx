@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { listProjects } from './api/ProjectApi';
 import sonaraLogo from '../assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from '../components/SidebarIcons';
 import { usePlayerStore } from '../stores/playerStore';
+import { useNotificationStore } from '../stores/notificationStore';
+import { apiFetch } from '../utils/api';
 
 interface Project {
   id: number;
@@ -15,6 +18,8 @@ const ArtistHome = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('');
+  const { currentTrack } = usePlayerStore();
+  const { unreadCount, startPolling } = useNotificationStore();
 
   useEffect(() => {
     document.title = 'Artist Home | Sonara';
@@ -28,13 +33,12 @@ const ArtistHome = () => {
 
     const fetchProfile = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        const response = await apiFetch('/api/auth/profile/');
         if (response.ok) {
           const data = await response.json();
           setUsername(data.username);
         }
+        startPolling();
       } catch { /* profile link will fall back to /profile */ }
     };
 
@@ -68,7 +72,7 @@ const ArtistHome = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <nav style={styles.sidebar}>
+      <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -77,19 +81,27 @@ const ArtistHome = () => {
 
         <div style={styles.sidebarNav}>
           <Link to="/" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🏠</span> Home
+            <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🔥</span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-            <span style={styles.sidebarIcon}>🎵</span> Create Music
+            <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
           <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
           </div>
+          <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+            <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+            {unreadCount > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                {unreadCount}
+              </span>
+            )}
+          </Link>
           <Link to={username ? `/@${username}` : '/profile'} className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>👤</span> Profile
+            <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
           </Link>
         </div>
 
@@ -172,10 +184,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -239,6 +253,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto',
+    marginLeft: 240,
+    height: '100vh',
   },
   content: {
     display: 'flex',

@@ -3,8 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import NotFound from './NotFound';
 import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
+import { useNotificationStore } from './stores/notificationStore';
+import { apiFetch } from './utils/api';
 import TrackEditModal from './components/TrackEditModal';
+import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
+import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
+import { getUserGradient } from './utils/userGradient';
 
 interface UserProfile {
   id: number;
@@ -37,6 +42,20 @@ interface Track {
   audio_file: string;
   uploaded_at: string;
   cover_image?: string;
+}
+
+interface RepostListEntry {
+  reposted_at: string;
+  track: {
+    id: number;
+    title: string;
+    audio_file: string;
+    uploaded_at?: string;
+    cover_image?: string;
+    username: string;
+    display_name?: string;
+    profile_picture?: string | null;
+  };
 }
 
 const TABS = ['Posts', 'Tracks', 'Playlists', 'Reposts'] as const;
@@ -75,8 +94,11 @@ const ProfilePage = () => {
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
   const [loggedInUsername, setLoggedInUsername] = useState('');
+  const [reposts, setReposts] = useState<RepostListEntry[]>([]);
+  const [repostsLoading, setRepostsLoading] = useState(false);
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
+  const { unreadCount, startPolling } = useNotificationStore();
 
   const trackInputRef = useRef<HTMLInputElement>(null);
   const headerInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +151,24 @@ const ProfilePage = () => {
       setTracksLoading(false);
     }
   }, [API_BASE_URL]);
+
+  const fetchReposts = useCallback(async () => {
+    if (!urlUsername) return;
+    setRepostsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/reposts/`);
+      if (res.ok) {
+        const data = await res.json();
+        setReposts(Array.isArray(data) ? data : []);
+      } else {
+        setReposts([]);
+      }
+    } catch {
+      setReposts([]);
+    } finally {
+      setRepostsLoading(false);
+    }
+  }, [API_BASE_URL, urlUsername]);
 
   const deleteTrack = async (trackId: number) => {
     const accessToken = localStorage.getItem('accessToken');
@@ -192,6 +232,22 @@ const ProfilePage = () => {
       title: track.title, artist: user?.display_name || user?.username || urlUsername || 'Unknown',
       audioUrl: track.audio_file, coverImage: user?.profile_picture || null,
       artistHandle: user?.username || urlUsername || '',
+    });
+  };
+
+  const playRepostedTrack = (t: RepostListEntry['track']) => {
+    if (currentTrack?.id === t.id && currentTrack?.type === 'track') {
+      togglePlayPause();
+      return;
+    }
+    play({
+      id: t.id,
+      type: 'track',
+      title: t.title,
+      artist: t.display_name || t.username,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || t.profile_picture || null,
+      artistHandle: t.username,
     });
   };
 
@@ -260,14 +316,13 @@ const ProfilePage = () => {
       let loggedInUsername: string | null = null;
       if (accessToken) {
         try {
-          const meRes = await fetch(`${API_BASE_URL}/api/auth/profile/`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          const meRes = await apiFetch('/api/auth/profile/');
           if (meRes.ok) {
             const meData = await meRes.json();
             loggedInUsername = meData.username;
             setLoggedInUsername(meData.username);
           }
+          startPolling();
         } catch { /* not logged in or token expired */ }
       }
 
@@ -346,6 +401,10 @@ const ProfilePage = () => {
   useEffect(() => {
     if (isOwnProfile) fetchTracks();
   }, [fetchTracks, isOwnProfile]);
+
+  useEffect(() => {
+    if (activeTab === 'Reposts') fetchReposts();
+  }, [activeTab, fetchReposts]);
 
   const headerPreviewUrl = useMemo(
     () => (headerFile ? URL.createObjectURL(headerFile) : null),
@@ -428,26 +487,34 @@ const ProfilePage = () => {
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
 
         <nav style={styles.sidebarNav}>
           <Link to="/home" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🏠</span> Home
+            <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🔥</span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}>🎵</span> Create Music
+            <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
           <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-            <span style={styles.sidebarIcon}>🛒</span> Marketplace
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
           </div>
+          <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
+            <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
+            {unreadCount > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', minWidth: 20, textAlign: 'center' }}>
+                {unreadCount}
+              </span>
+            )}
+          </Link>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-            <span style={styles.sidebarIcon}>👤</span> Profile
+            <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
           </div>
         </nav>
 
@@ -515,7 +582,7 @@ const ProfilePage = () => {
                   ...styles.editCover,
                   ...(getHeaderImageUrl()
                     ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-                    : {}),
+                    : { background: getUserGradient(user?.username || '') }),
                 }}
               >
                 {getHeaderImageUrl() && <div style={styles.coverGradient} />}
@@ -544,12 +611,6 @@ const ProfilePage = () => {
                     </button>
                   )}
                 </div>
-                {!getHeaderImageUrl() && (
-                  <div style={styles.coverPlaceholder}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                    <span>Add cover photo</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -567,9 +628,9 @@ const ProfilePage = () => {
                 onClick={() => pfpInputRef.current?.click()}
               >
                 {!getPfpImageUrl() && (
-                  <span style={styles.avatarIcon}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                  </span>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                    {user?.username ? user.username[0].toUpperCase() : '?'}
+                  </div>
                 )}
                 {/* Camera badge */}
                 <div style={styles.avatarCameraBadge}>
@@ -684,16 +745,10 @@ const ProfilePage = () => {
             ...styles.cover,
             ...(getHeaderImageUrl()
               ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-              : {}),
+              : { background: getUserGradient(user?.username || '') }),
           }}
         >
           {getHeaderImageUrl() && <div style={styles.coverGradient} />}
-          {!getHeaderImageUrl() && (
-            <div style={styles.coverPlaceholder}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-              <span>No cover photo</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -709,9 +764,9 @@ const ProfilePage = () => {
             }}
           >
             {!getPfpImageUrl() && (
-              <span style={styles.avatarIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-              </span>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                {user?.username ? user.username[0].toUpperCase() : '?'}
+              </div>
             )}
           </div>
 
@@ -879,6 +934,69 @@ const ProfilePage = () => {
                 </div>
               )}
             </div>
+          ) : activeTab === 'Reposts' ? (
+            <div>
+              {repostsLoading ? (
+                <p style={styles.comingSoon}>Loading reposts…</p>
+              ) : reposts.length === 0 ? (
+                <p style={styles.comingSoon}>
+                  {isOwnProfile ? 'Repost tracks you love — they’ll show up here.' : 'No reposts yet.'}
+                </p>
+              ) : (
+                <div style={styles.trackList}>
+                  {reposts.map((entry) => (
+                    <div key={`${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                      <div style={styles.repostCardMeta}>
+                        <span style={styles.repostBadge}>
+                            <RepostIcon size={14} active />
+                            <span style={{ marginLeft: 6 }}>Reposted</span>
+                        </span>
+                        <span style={styles.repostDate}>
+                          {new Date(entry.reposted_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                      <div style={styles.trackCard}>
+                        <button
+                          type="button"
+                          onClick={() => playRepostedTrack(entry.track)}
+                          style={styles.playBtn}
+                          aria-label={
+                            currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                              ? 'Pause'
+                              : 'Play'
+                          }
+                        >
+                          {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                            ? '⏸'
+                            : '▶'}
+                        </button>
+                        <div style={styles.trackInfo}>
+                          <span style={styles.trackTitle}>{entry.track.title}</span>
+                          <button
+                            type="button"
+                            style={styles.repostOriginalArtist}
+                            onClick={() => navigate(`/@${entry.track.username}`)}
+                          >
+                            {entry.track.display_name || entry.track.username}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/track/${entry.track.id}`)}
+                          style={styles.repostOpenBtn}
+                        >
+                          Open
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <p style={styles.comingSoon}>{activeTab} — Coming soon</p>
           )}
@@ -889,7 +1007,7 @@ const ProfilePage = () => {
       {cropTarget && cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
-          aspect={cropTarget === 'pfp' ? 1 : 16 / 9}
+          aspect={cropTarget === 'pfp' ? 1 : 5.15}
           cropShape={cropTarget === 'pfp' ? 'round' : 'rect'}
           onCropComplete={(blob) => {
             const ext = blob.type === 'image/png' ? '.png' : '.jpg';
@@ -940,8 +1058,8 @@ const ProfilePage = () => {
                   >
                     {u.profile_picture
                       ? <img src={u.profile_picture} alt="" style={styles.followUserAvatar} />
-                      : <div style={styles.followUserAvatarPh}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      : <div style={{...styles.followUserAvatarPh, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 16}}>
+                          {u.username ? u.username[0].toUpperCase() : '?'}
                         </div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -996,10 +1114,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
-    position: 'sticky' as const,
+    position: 'fixed' as const,
     top: 0,
-    height: '100vh',
-    overflowY: 'auto' as const,
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -1065,6 +1185,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto' as const,
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
   },
   loadingWrap: {
     display: 'flex',
@@ -1115,7 +1237,9 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 20px rgba(167, 139, 250, 0.3)',
   },
   coverWrap: {
-    width: '100%',
+    maxWidth: '1330px',
+    margin: '0 auto',
+    padding: '24px 24px 0',
     position: 'relative',
     zIndex: 1,
   },
@@ -1128,7 +1252,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottom: '1px solid rgba(167, 139, 250, 0.2)',
+    borderRadius: '16px',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1237,7 +1361,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editCover: {
     width: '100%',
-    height: '200px',
+    aspectRatio: '5.15',
     background: 'linear-gradient(135deg, rgba(19, 19, 31, 0.9) 0%, rgba(30, 25, 50, 0.7) 50%, rgba(40, 20, 60, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
@@ -1360,14 +1484,14 @@ const styles: Record<string, React.CSSProperties> = {
   main: {
     maxWidth: '1280px',
     margin: '0 auto',
-    marginTop: '-60px',
+    marginTop: '-9px',
     position: 'relative',
     zIndex: 1,
     paddingLeft: '24px',
     paddingRight: '24px',
     borderLeft: '1px solid rgba(167, 139, 250, 0.15)',
     borderRight: '1px solid rgba(167, 139, 250, 0.15)',
-    minHeight: 'calc(100vh - 53px - 230px + 60px)',
+    minHeight: 'calc(100vh - 53px + 284px)',
   },
   coverPlaceholder: {
     display: 'flex',
@@ -1394,7 +1518,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     border: '4px solid #0f0f1a',
-    marginTop: '-60px',
+    marginTop: '-70px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1706,6 +1830,57 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column' as const,
     gap: '8px',
   },
+  repostCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 8,
+    padding: '12px 14px',
+    borderRadius: 14,
+    background: 'rgba(20, 18, 38, 0.55)',
+    border: '1px solid rgba(94, 234, 212, 0.12)',
+  },
+  repostCardMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  repostBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'rgba(94, 234, 212, 0.9)',
+  },
+  repostDate: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  repostOriginalArtist: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    textAlign: 'left' as const,
+    fontSize: 13,
+    color: 'rgba(167, 139, 250, 0.85)',
+    cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  repostOpenBtn: {
+    padding: '8px 14px',
+    borderRadius: 9999,
+    border: '1px solid rgba(167, 139, 250, 0.35)',
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0,
+    fontFamily: "'Poppins', sans-serif",
+  },
   trackCard: {
     display: 'flex',
     alignItems: 'center',
@@ -1820,6 +1995,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
+    overflow: 'hidden',
   },
   followModal: {
     width: '100%',
@@ -1855,6 +2031,7 @@ const styles: Record<string, React.CSSProperties> = {
   followModalBody: {
     overflowY: 'auto' as const,
     flex: 1,
+    paddingRight: 4,
   },
   followUserRow: {
     display: 'flex',
