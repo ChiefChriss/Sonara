@@ -1,3 +1,4 @@
+import re
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateAPIView
@@ -734,7 +735,7 @@ def _absolute_media_url(request, file_field):
 
 
 class FollowingRepostsView(APIView):
-    """Tracks recently reposted by people the current user follows."""
+    """Tracks recently reposted or uploaded by people the current user follows."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -743,24 +744,66 @@ class FollowingRepostsView(APIView):
         )
         if not following_ids:
             return Response([])
+        ctx = {'request': request}
+
+        # Reposts from followed users
         reposts = (
             TrackRepost.objects.filter(user_id__in=following_ids)
             .select_related('track', 'track__user', 'user')
             .order_by('-created_at')[:25]
         )
-        ctx = {'request': request}
-        return Response(
-            [
-                {
-                    'reposted_at': rp.created_at,
-                    'reposter_username': rp.user.username,
-                    'reposter_display_name': rp.user.display_name or '',
-                    'reposter_profile_picture': _absolute_media_url(request, rp.user.profile_picture),
-                    'track': PublicTrackSerializer(rp.track, context=ctx).data,
-                }
-                for rp in reposts
-            ]
+        repost_items = [
+            {
+                'activity_type': 'repost',
+                'timestamp': rp.created_at,
+                'reposter_username': rp.user.username,
+                'reposter_display_name': rp.user.display_name or '',
+                'reposter_profile_picture': _absolute_media_url(request, rp.user.profile_picture),
+                'track': PublicTrackSerializer(rp.track, context=ctx).data,
+            }
+            for rp in reposts
+        ]
+
+        # Recent track uploads from followed users
+        uploads = (
+            Track.objects.filter(user_id__in=following_ids)
+            .select_related('user')
+            .order_by('-uploaded_at')[:25]
         )
+        upload_items = [
+            {
+                'activity_type': 'upload',
+                'timestamp': t.uploaded_at,
+                'reposter_username': t.user.username,
+                'reposter_display_name': t.user.display_name or '',
+                'reposter_profile_picture': _absolute_media_url(request, t.user.profile_picture),
+                'track': PublicTrackSerializer(t, context=ctx).data,
+            }
+            for t in uploads
+        ]
+
+        # Recent publication uploads from followed users
+        pubs = (
+            Publication.objects.filter(user_id__in=following_ids, is_public=True)
+            .select_related('user')
+            .order_by('-published_at')[:25]
+        )
+        pub_items = [
+            {
+                'activity_type': 'upload',
+                'timestamp': p.published_at,
+                'reposter_username': p.user.username,
+                'reposter_display_name': p.user.display_name or '',
+                'reposter_profile_picture': _absolute_media_url(request, p.user.profile_picture),
+                'track': PublicationSerializer(p, context=ctx).data,
+            }
+            for p in pubs
+        ]
+
+        # Merge and sort by timestamp, newest first
+        combined = repost_items + upload_items + pub_items
+        combined.sort(key=lambda x: x['timestamp'], reverse=True)
+        return Response(combined[:25])
 
 
 # ═══════════════════════════════════════════
@@ -855,6 +898,24 @@ def _notify_for_new_comment(*, comment, owner, sender, parent, track=None, publi
                     comment=comment,
                 )
             )
+    # Parse @mentions from comment body
+    already_notified = {sender.id} | {n.recipient_id for n in to_create}
+    mentioned_usernames = set(re.findall(r'@(\w+)', comment.body))
+    if mentioned_usernames:
+        from .models import User
+        mentioned_users = User.objects.filter(username__in=mentioned_usernames).exclude(id__in=already_notified)
+        for user in mentioned_users:
+            to_create.append(
+                Notification(
+                    recipient=user,
+                    sender=sender,
+                    notification_type=Notification.MENTION,
+                    track=track,
+                    publication=publication,
+                    comment=comment,
+                )
+            )
+
     if to_create:
         Notification.objects.bulk_create(to_create)
 

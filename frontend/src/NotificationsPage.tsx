@@ -6,6 +6,7 @@ import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getUserGradient } from './utils/userGradient';
 
 interface Notification {
   id: number;
@@ -87,7 +88,7 @@ const NotificationsPage = () => {
     if (activeTab === 'likes') return n.notification_type === 'like_track' || n.notification_type === 'like_publication';
     if (activeTab === 'follows') return n.notification_type === 'follow';
     if (activeTab === 'comments') {
-      return n.notification_type === 'comment' || n.notification_type === 'comment_reply';
+      return n.notification_type === 'comment' || n.notification_type === 'comment_reply' || n.notification_type === 'mention';
     }
     return true;
   });
@@ -172,6 +173,10 @@ const NotificationsPage = () => {
       }
       case 'repost':
         return <><strong>{name}</strong> reposted your song</>;
+      case 'mention': {
+        const piece = n.track_title || n.publication_title || 'a song';
+        return <><strong>{name}</strong> mentioned you in a comment on <strong>{piece}</strong></>;
+      }
       default:
         return <><strong>{name}</strong> interacted with your content</>;
     }
@@ -191,6 +196,8 @@ const NotificationsPage = () => {
       case 'comment':
       case 'comment_reply':
         return <span style={{ fontSize: 14 }}>💬</span>;
+      case 'mention':
+        return <span style={{ fontSize: 14 }}>@</span>;
       case 'repost':
         return <RepostIcon size={16} active />;
       default:
@@ -223,7 +230,7 @@ const NotificationsPage = () => {
   const unreadLikes = notifications.filter((n) => isUnread(n) && (n.notification_type === 'like_track' || n.notification_type === 'like_publication')).length;
   const unreadFollows = notifications.filter((n) => isUnread(n) && n.notification_type === 'follow').length;
   const unreadComments = notifications.filter(
-    (n) => isUnread(n) && (n.notification_type === 'comment' || n.notification_type === 'comment_reply'),
+    (n) => isUnread(n) && (n.notification_type === 'comment' || n.notification_type === 'comment_reply' || n.notification_type === 'mention'),
   ).length;
 
   return (
@@ -239,7 +246,7 @@ const NotificationsPage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -343,7 +350,7 @@ const NotificationsPage = () => {
                           borderColor: isUnread(n) ? 'rgba(167,139,250,0.5)' : 'rgba(167,139,250,0.2)',
                         }} />
                       ) : (
-                        <div style={styles.notifAvatarPh}><ProfileIcon color="#ec4899" /></div>
+                        <div style={{...styles.notifAvatarPh, background: getUserGradient(n.sender_username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 20}}>{n.sender_username ? n.sender_username[0].toUpperCase() : '?'}</div>
                       )}
                       <div style={styles.notifIconBadge}>
                         {getNotificationIcon(n.notification_type)}
@@ -472,7 +479,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     marginLeft: 240,
-    height: '100vh',
+    height: 'calc(100vh - 64px)',
     overflowY: 'auto',
   },
   contentWrapper: {

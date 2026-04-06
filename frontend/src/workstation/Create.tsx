@@ -84,7 +84,7 @@ const ArtistHome = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music

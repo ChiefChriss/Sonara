@@ -20,6 +20,7 @@ const DEFAULT_H = 88;
  * Mirrored waveform for track/publication detail. Blue→purple gradient when playing.
  */
 const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant = 'default' }: Props) => {
+    const visibilityRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const lastProgressRef = useRef(0);
@@ -32,8 +33,9 @@ const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant
 
     const duration = usePlayerStore((s) => (isActive ? s.duration : 0));
     const isPlaying = usePlayerStore((s) => (isActive ? s.isPlaying : false));
-    const storeTime = usePlayerStore((s) => (isActive ? s.currentTime : 0));
     const seek = usePlayerStore((s) => s.seek);
+    // Only read currentTime when paused to avoid re-renders every frame during playback
+    const storeTime = usePlayerStore((s) => (isActive && !s.isPlaying ? s.currentTime : 0));
 
     const hostStyle = useMemo((): CSSProperties => {
         const base: CSSProperties = {
@@ -79,7 +81,21 @@ const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant
         [peaks, isActive, duration],
     );
 
+    // Only decode audio when visible on screen
+    const [isVisible, setIsVisible] = useState(false);
     useEffect(() => {
+        const el = visibilityRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect(); } },
+            { rootMargin: '200px' },
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        if (!isVisible) return;
         const ac = new AbortController();
         setLoadError(false);
         setPeaks(null);
@@ -89,7 +105,7 @@ const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant
                 if (!ac.signal.aborted) setLoadError(true);
             });
         return () => ac.abort();
-    }, [audioUrl]);
+    }, [audioUrl, isVisible]);
 
     const progressFromStore = duration > 0 ? storeTime / duration : 0;
 
@@ -188,7 +204,7 @@ const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant
 
     if (loadError) {
         return (
-            <div style={{ ...styles.placeholder, height: waveHeight, borderRadius: variant === 'hero' ? 12 : 6 }}>
+            <div ref={visibilityRef} style={{ ...styles.placeholder, height: waveHeight, borderRadius: variant === 'hero' ? 12 : 6 }}>
                 <div style={styles.placeholderInner} />
             </div>
         );
@@ -197,6 +213,7 @@ const TrackPageWaveform = ({ audioUrl, isActive, waveHeight = DEFAULT_H, variant
     if (!peaks) {
         return (
             <div
+                ref={visibilityRef}
                 style={{
                     ...styles.skeletonHost,
                     height: waveHeight,

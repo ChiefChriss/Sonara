@@ -497,7 +497,7 @@ const ProfilePage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -628,9 +628,9 @@ const ProfilePage = () => {
                 onClick={() => pfpInputRef.current?.click()}
               >
                 {!getPfpImageUrl() && (
-                  <span style={styles.avatarIcon}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                  </span>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                    {user?.username ? user.username[0].toUpperCase() : '?'}
+                  </div>
                 )}
                 {/* Camera badge */}
                 <div style={styles.avatarCameraBadge}>
@@ -764,9 +764,9 @@ const ProfilePage = () => {
             }}
           >
             {!getPfpImageUrl() && (
-              <span style={styles.avatarIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-              </span>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                {user?.username ? user.username[0].toUpperCase() : '?'}
+              </div>
             )}
           </div>
 
@@ -1058,8 +1058,8 @@ const ProfilePage = () => {
                   >
                     {u.profile_picture
                       ? <img src={u.profile_picture} alt="" style={styles.followUserAvatar} />
-                      : <div style={styles.followUserAvatarPh}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      : <div style={{...styles.followUserAvatarPh, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 16}}>
+                          {u.username ? u.username[0].toUpperCase() : '?'}
                         </div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1186,7 +1186,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     overflowY: 'auto' as const,
     marginLeft: 240,
-    height: '100vh',
+    height: 'calc(100vh - 64px)',
   },
   loadingWrap: {
     display: 'flex',

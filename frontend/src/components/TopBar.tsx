@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiFetch } from '../utils/api';
 import { getUserGradient } from '../utils/userGradient';
+// getTrackGradient available if track cover placeholders are added to search results
+// import { getTrackGradient } from '../utils/trackGradient';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -171,7 +173,7 @@ const TopBar = () => {
                   >
                     {u.profile_picture
                       ? <img src={u.profile_picture} alt="" style={styles.dropAvatar} />
-                      : <div style={styles.dropAvatarPh}>👤</div>}
+                      : <div style={{...styles.dropAvatarPh, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 14}}>{u.username ? u.username[0].toUpperCase() : '?'}</div>}
                     <div>
                       <div style={styles.dropName}>{u.username}</div>
                       <div style={styles.dropSub}>{u.role === 'both' ? 'Listener & Creator' : u.role}</div>
@@ -220,7 +222,7 @@ const TopBar = () => {
           {profilePicture ? (
             <img src={profilePicture} alt="" style={styles.profileAvatarImg} />
           ) : (
-            <div style={styles.profileAvatarPlaceholder}>
+            <div style={{...styles.profileAvatarPlaceholder, background: getUserGradient(username)}}>
               {username ? username[0].toUpperCase() : '?'}
             </div>
           )}
@@ -240,7 +242,7 @@ const TopBar = () => {
               {profilePicture ? (
                 <img src={profilePicture} alt="" style={styles.profileDropdownAvatarImg} />
               ) : (
-                <div style={styles.profileDropdownAvatarPlaceholder}>
+                <div style={{...styles.profileDropdownAvatarPlaceholder, background: getUserGradient(username)}}>
                   {username ? username[0].toUpperCase() : '?'}
                 </div>
               )}
@@ -303,6 +305,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     zIndex: 10,
     marginLeft: 240,
+    fontFamily: "'Poppins', sans-serif",
   },
   searchWrap: {
     position: 'relative',

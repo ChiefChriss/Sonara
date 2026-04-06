@@ -300,6 +300,7 @@ class Notification(models.Model):
     COMMENT = 'comment'
     COMMENT_REPLY = 'comment_reply'
     REPOST = 'repost'
+    MENTION = 'mention'
 
     TYPE_CHOICES = [
         (LIKE_TRACK, 'Liked your track'),
@@ -308,6 +309,7 @@ class Notification(models.Model):
         (COMMENT, 'Commented on your song'),
         (COMMENT_REPLY, 'Replied to your comment'),
         (REPOST, 'Reposted your song'),
+        (MENTION, 'Mentioned you in a comment'),
     ]
 
     recipient = models.ForeignKey(

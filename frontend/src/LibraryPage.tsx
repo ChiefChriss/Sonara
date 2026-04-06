@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getTrackGradient } from './utils/trackGradient';
 
 interface LibraryItem {
     id: number;
@@ -141,7 +142,7 @@ const LibraryPage = () => {
                         <span style={styles.sidebarIcon}><HomeIcon /></span> Home
                     </Link>
                     <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
                     </Link>
                     <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                         <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -225,9 +226,7 @@ const LibraryPage = () => {
                                         {item.cover_image ? (
                                             <img src={item.cover_image} alt="" style={styles.coverImg} />
                                         ) : (
-                                            <div style={styles.coverPlaceholder}>
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                                            </div>
+                                            <div style={{ ...styles.coverPlaceholder, background: getTrackGradient(item.id) }} />
                                         )}
                                         <div style={styles.titleInfo}>
                                             <span style={styles.songTitle}>{item.title}</span>
@@ -294,7 +293,7 @@ const styles: Record<string, React.CSSProperties> = {
     uploadBtn: { display: 'block', textAlign: 'center' as const, padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
 
     // ── Main area ──
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const, marginLeft: 240, height: '100vh' },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const, marginLeft: 240, height: 'calc(100vh - 64px)' },
     main: { maxWidth: '960px', margin: '0 auto', padding: '32px 24px', position: 'relative' as const, zIndex: 1 },
     pageTitle: { fontSize: '24px', fontWeight: 700, marginBottom: '16px' },
     subtitle: { fontSize: '14px', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' },

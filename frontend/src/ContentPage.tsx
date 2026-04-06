@@ -7,6 +7,8 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import TrackPageWaveform from './components/TrackPageWaveform';
 import RepostIcon from './components/RepostIcon';
+import { getTrackGradient } from './utils/trackGradient';
+import { getUserGradient } from './utils/userGradient';
 
 const COMMENT_MAX = 500;
 
@@ -203,7 +205,7 @@ const ContentPage = () => {
                     <span style={styles.sidebarIcon}><HomeIcon /></span> Home
                 </Link>
                 <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-                    <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+                    <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
                 </Link>
                 <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -486,8 +488,8 @@ const ContentPage = () => {
                                 style={opts.isReply ? styles.commentAvatarImgSmall : styles.commentAvatarImg}
                             />
                         ) : (
-                            <div style={opts.isReply ? styles.commentAvatarPhSmall : styles.commentAvatarPh}>
-                                <ProfileIcon color="#a78bfa" />
+                            <div style={{...(opts.isReply ? styles.commentAvatarPhSmall : styles.commentAvatarPh), background: getUserGradient(c.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: opts.isReply ? 13 : 17}}>
+                                {c.username ? c.username[0].toUpperCase() : '?'}
                             </div>
                         )}
                     </div>
@@ -650,9 +652,7 @@ const ContentPage = () => {
                                     {coverUrl ? (
                                         <img src={coverUrl} alt="Cover" style={styles.coverImg} />
                                     ) : (
-                                        <div style={styles.coverPlaceholder}>
-                                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                                        </div>
+                                        <div style={{ ...styles.coverPlaceholder, background: getTrackGradient(data.id) }} />
                                     )}
                                 </div>
 
@@ -823,7 +823,7 @@ const styles: Record<string, React.CSSProperties> = {
     sidebarIcon: { fontSize: 18, width: 24, textAlign: 'center' },
     sidebarBottom: { padding: '16px 12px 24px', borderTop: '1px solid rgba(167,139,250,0.1)' },
     uploadBtn: { display: 'block', textAlign: 'center', padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto', marginLeft: 240, height: '100vh' },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', marginLeft: 240, height: 'calc(100vh - 64px)' },
 
     // ── Content styles ────────────────────────────────────────────────────────
     loadingWrap: {
@@ -980,7 +980,7 @@ const styles: Record<string, React.CSSProperties> = {
     },
     commentsOuter: {
         width: '100%',
-        padding: '32px 24px 48px',
+        padding: '32px 24px 96px',
         display: 'flex',
         justifyContent: 'center',
     },
@@ -993,10 +993,17 @@ const styles: Record<string, React.CSSProperties> = {
         fontWeight: 700,
         margin: '0 0 20px',
         color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
     },
     commentsCount: {
+        fontSize: 14,
         color: 'rgba(167, 139, 250, 0.85)',
         fontWeight: 600,
+        background: 'rgba(167, 139, 250, 0.15)',
+        padding: '2px 10px',
+        borderRadius: 12,
     },
     commentComposer: {
         marginBottom: 28,

@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePlayerStore, PlayerTrack } from '../stores/playerStore';
+import { getTrackGradient } from '../utils/trackGradient';
 
 const formatTime = (s: number) => {
     if (!s || !isFinite(s)) return '0:00';
@@ -100,13 +101,7 @@ const PlayerBar = () => {
                         {currentTrack.coverImage ? (
                             <img src={currentTrack.coverImage} alt="" style={styles.cover} />
                         ) : (
-                            <div style={styles.coverPlaceholder}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2">
-                                    <path d="M9 18V5l12-2v13" />
-                                    <circle cx="6" cy="18" r="3" />
-                                    <circle cx="18" cy="16" r="3" />
-                                </svg>
-                            </div>
+                            <div style={{ ...styles.coverPlaceholder, background: getTrackGradient(currentTrack.id) }} />
                         )}
                         <div style={styles.trackInfo}>
                             <span style={styles.trackTitle}>{currentTrack.title}</span>

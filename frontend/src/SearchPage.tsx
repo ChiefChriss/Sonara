@@ -4,6 +4,7 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
+import { getUserGradient } from './utils/userGradient';
 
 interface SearchUser {
   id: number;
@@ -156,7 +157,7 @@ const SearchPage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -231,8 +232,8 @@ const SearchPage = () => {
                     {u.profile_picture ? (
                       <img src={u.profile_picture} alt="" style={styles.userAvatar} />
                     ) : (
-                      <div style={styles.userAvatarPlaceholder}>
-                        <span style={{ fontSize: '24px', opacity: 0.6 }}>👤</span>
+                      <div style={{...styles.userAvatarPlaceholder, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 18}}>
+                        {u.username ? u.username[0].toUpperCase() : '?'}
                       </div>
                     )}
                     <div style={styles.userInfo}>
@@ -420,7 +421,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     overflowY: 'auto',
     marginLeft: 240,
-    height: '100vh',
+    height: 'calc(100vh - 64px)',
   },
   searchBarSection: {
     position: 'sticky',
