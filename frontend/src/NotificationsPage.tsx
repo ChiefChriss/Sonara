@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
+import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
 
@@ -19,7 +20,7 @@ interface Notification {
   publication_id: number | null;
 }
 
-type TabFilter = 'all' | 'likes' | 'follows';
+type TabFilter = 'all' | 'likes' | 'follows' | 'comments';
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
@@ -83,6 +84,9 @@ const NotificationsPage = () => {
   const filtered = notifications.filter((n) => {
     if (activeTab === 'likes') return n.notification_type === 'like_track' || n.notification_type === 'like_publication';
     if (activeTab === 'follows') return n.notification_type === 'follow';
+    if (activeTab === 'comments') {
+      return n.notification_type === 'comment' || n.notification_type === 'comment_reply';
+    }
     return true;
   });
 
@@ -156,8 +160,14 @@ const NotificationsPage = () => {
         return <><strong>{name}</strong> liked your publication <strong>{n.publication_title}</strong></>;
       case 'follow':
         return <><strong>{name}</strong> started following you</>;
-      case 'comment':
-        return <><strong>{name}</strong> commented on your song</>;
+      case 'comment': {
+        const piece = n.track_title || n.publication_title || 'your song';
+        return <><strong>{name}</strong> commented on <strong>{piece}</strong></>;
+      }
+      case 'comment_reply': {
+        const piece = n.track_title || n.publication_title || 'your song';
+        return <><strong>{name}</strong> replied to your comment on <strong>{piece}</strong></>;
+      }
       case 'repost':
         return <><strong>{name}</strong> reposted your song</>;
       default:
@@ -177,9 +187,10 @@ const NotificationsPage = () => {
       case 'follow':
         return <ProfileIcon color="#fff" />;
       case 'comment':
+      case 'comment_reply':
         return <span style={{ fontSize: 14 }}>💬</span>;
       case 'repost':
-        return <span style={{ fontSize: 14 }}>🔁</span>;
+        return <RepostIcon size={16} active />;
       default:
         return <span style={{ fontSize: 14 }}>🔔</span>;
     }
@@ -209,6 +220,9 @@ const NotificationsPage = () => {
   const unreadAll = notifications.filter((n) => isUnread(n)).length;
   const unreadLikes = notifications.filter((n) => isUnread(n) && (n.notification_type === 'like_track' || n.notification_type === 'like_publication')).length;
   const unreadFollows = notifications.filter((n) => isUnread(n) && n.notification_type === 'follow').length;
+  const unreadComments = notifications.filter(
+    (n) => isUnread(n) && (n.notification_type === 'comment' || n.notification_type === 'comment_reply'),
+  ).length;
 
   return (
     <div style={styles.pageWrapper}>
@@ -260,6 +274,7 @@ const NotificationsPage = () => {
                 { key: 'all' as TabFilter, label: 'All', count: unreadAll },
                 { key: 'likes' as TabFilter, label: 'Likes', count: unreadLikes },
                 { key: 'follows' as TabFilter, label: 'Follows', count: unreadFollows },
+                { key: 'comments' as TabFilter, label: 'Comments', count: unreadComments },
               ]).map((tab) => (
                 <button
                   key={tab.key}
@@ -294,18 +309,20 @@ const NotificationsPage = () => {
               <div style={styles.emptyState}>
                 <div style={styles.emptyIconWrap}>
                   <span style={{ fontSize: 56 }}>
-                    {activeTab === 'likes' ? '❤️' : activeTab === 'follows' ? '👥' : '🔔'}
+                    {activeTab === 'likes' ? '❤️' : activeTab === 'follows' ? '👥' : activeTab === 'comments' ? '💬' : '🔔'}
                   </span>
                 </div>
                 <p style={{ fontSize: 18, fontWeight: 600, marginTop: 20 }}>
                   {activeTab === 'all' && 'No notifications yet'}
                   {activeTab === 'likes' && 'No likes yet'}
                   {activeTab === 'follows' && 'No new followers'}
+                  {activeTab === 'comments' && 'No comments yet'}
                 </p>
                 <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginTop: 8, maxWidth: 320, lineHeight: 1.5 }}>
-                  {activeTab === 'all' && 'When someone likes your song, follows you, or interacts with your content, it\'ll show up here.'}
+                  {activeTab === 'all' && 'When someone likes your song, follows you, comments on your track, or interacts with your content, it\'ll show up here.'}
                   {activeTab === 'likes' && 'When someone likes one of your tracks or publications, you\'ll see it here.'}
                   {activeTab === 'follows' && 'When someone follows you, you\'ll see it here.'}
+                  {activeTab === 'comments' && 'When someone comments on your track or publication, you\'ll see it here.'}
                 </p>
               </div>
             ) : (

@@ -8,11 +8,15 @@ from .views import (
     PublicationListCreateView, PublicationUpdateDeleteView,
     PublicFeedView, PublicationDetailView, UserPublicationsView, PublicationPlayView,
     ToggleLikeView, LibraryView,
-    TrackPlayView, ToggleTrackLikeView,
+    TrackPlayView, ToggleTrackLikeView, ToggleTrackRepostView,
+    UserRepostsView, FollowingRepostsView,
     TrendingTracksView, NewReleasesView,
     ToggleFollowView, FollowersListView, FollowingListView,
     NotificationListView, NotificationUnreadCountView,
     NotificationMarkReadView, NotificationMarkAllReadView,
+    TrackCommentsView, PublicationCommentsView,
+    TrackCommentDeleteView, PublicationCommentDeleteView,
+    ToggleTrackCommentLikeView, TogglePublicationCommentLikeView,
 )
 
 urlpatterns = [
@@ -26,6 +30,11 @@ urlpatterns = [
     path('tracks/<int:pk>/', TrackUpdateDeleteView.as_view(), name='track-delete'),
     path('tracks/<int:pk>/play/', TrackPlayView.as_view(), name='track-play'),
     path('tracks/<int:pk>/like/', ToggleTrackLikeView.as_view(), name='track-like'),
+    path('tracks/<int:pk>/repost/', ToggleTrackRepostView.as_view(), name='track-repost'),
+    path('following-reposts/', FollowingRepostsView.as_view(), name='following-reposts'),
+    path('tracks/<int:pk>/comments/', TrackCommentsView.as_view(), name='track-comments'),
+    path('tracks/<int:pk>/comments/<int:comment_id>/like/', ToggleTrackCommentLikeView.as_view(), name='track-comment-like'),
+    path('tracks/<int:pk>/comments/<int:comment_id>/', TrackCommentDeleteView.as_view(), name='track-comment-delete'),
 
     # DAW projects
     path('projects/', ProjectListCreateView.as_view(), name='project-list-create'),
@@ -36,6 +45,9 @@ urlpatterns = [
     path('publications/<int:pk>/', PublicationUpdateDeleteView.as_view(), name='publication-delete'),
     path('publications/<int:pk>/play/', PublicationPlayView.as_view(), name='publication-play'),
     path('publications/<int:pk>/like/', ToggleLikeView.as_view(), name='publication-like'),
+    path('publications/<int:pk>/comments/', PublicationCommentsView.as_view(), name='publication-comments'),
+    path('publications/<int:pk>/comments/<int:comment_id>/like/', TogglePublicationCommentLikeView.as_view(), name='publication-comment-like'),
+    path('publications/<int:pk>/comments/<int:comment_id>/', PublicationCommentDeleteView.as_view(), name='publication-comment-delete'),
 
     # Library (user's liked songs)
     path('library/', LibraryView.as_view(), name='library'),
@@ -45,6 +57,7 @@ urlpatterns = [
     path('tracks/<int:pk>/detail/', TrackDetailView.as_view(), name='public-track-detail'),
     path('feed/', PublicFeedView.as_view(), name='public-feed'),
     path('publications/<int:pk>/detail/', PublicationDetailView.as_view(), name='public-publication-detail'),
+    path('users/<str:username>/reposts/', UserRepostsView.as_view(), name='user-reposts'),
     path('users/<str:username>/', PublicUserProfileView.as_view(), name='public-user-profile'),
     path('users/<str:username>/follow/', ToggleFollowView.as_view(), name='toggle-follow'),
     path('users/<str:username>/followers/', FollowersListView.as_view(), name='followers-list'),

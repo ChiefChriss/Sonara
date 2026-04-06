@@ -5,6 +5,7 @@ import { apiFetch } from './utils/api';
 import { useNotificationStore } from './stores/notificationStore';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
+import RepostIcon from './components/RepostIcon';
 
 // ── Interfaces (Chris) ──────────────────────────────────────────────────────
 
@@ -31,6 +32,26 @@ interface SearchUser {
   role: string;
 }
 
+interface FollowingRepostItem {
+  reposted_at: string;
+  reposter_username: string;
+  reposter_display_name: string;
+  reposter_profile_picture: string | null;
+  track: Track;
+}
+
+const repostTimeAgo = (dateStr: string) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+};
+
 // ── Gradient palette for cards without cover images (Tony) ───────────────────
 
 const CARD_GRADIENTS = [
@@ -54,6 +75,7 @@ const ListenerHome = () => {
   const [trending, setTrending] = useState<Track[]>([]);
   const [newReleases, setNewReleases] = useState<Track[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [followingReposts, setFollowingReposts] = useState<FollowingRepostItem[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
 
   // Chris: search state
@@ -85,10 +107,11 @@ const ListenerHome = () => {
         setUsername(profileData.username);
         startPolling();
 
-        const [trendRes, newRes, exploreRes] = await Promise.all([
+        const [trendRes, newRes, exploreRes, followingRepostsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/auth/trending/`),
           fetch(`${API_BASE_URL}/api/auth/new-releases/`),
           fetch(`${API_BASE_URL}/api/auth/explore/`),
+          apiFetch('/api/auth/following-reposts/'),
         ]);
 
         const fmt = (d: any): Track[] => {
@@ -104,6 +127,10 @@ const ListenerHome = () => {
         if (trendRes.ok) setTrending(fmt(await trendRes.json()));
         if (newRes.ok) setNewReleases(fmt(await newRes.json()));
         if (exploreRes.ok) setAllTracks(fmt(await exploreRes.json()));
+        if (followingRepostsRes.ok) {
+          const raw = await followingRepostsRes.json();
+          setFollowingReposts(Array.isArray(raw) ? raw : []);
+        }
       } catch {
         navigate('/login');
       } finally {
@@ -222,6 +249,88 @@ const ListenerHome = () => {
             {item.display_name || item.username}
           </p>
           <p style={styles.cardPlays}>▶ {formatCount(item.play_count)}</p>
+        </div>
+      </div>
+    );
+  };
+
+  /** Repost from someone you follow — secondary home feed strip */
+  const FollowingRepostRow = ({ item }: { item: FollowingRepostItem }) => {
+    const t = { ...item.track, type: 'track' as const };
+    const playing = isPlaying(t);
+    const name = item.reposter_display_name || item.reposter_username;
+    return (
+      <div style={styles.followingRepostWrap}>
+        <button
+          type="button"
+          style={styles.followingRepostHeader}
+          onClick={() => navigate(`/@${item.reposter_username}`)}
+        >
+          {item.reposter_profile_picture ? (
+            <img src={item.reposter_profile_picture} alt="" style={styles.followingRepostAvatar} />
+          ) : (
+            <div style={styles.followingRepostAvatarPh}>👤</div>
+          )}
+          <span style={styles.followingRepostHeaderText}>
+            <strong style={{ color: '#e9d5ff' }}>{name}</strong>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 400 }}>
+              {' '}
+              reposted · {repostTimeAgo(item.reposted_at)}
+            </span>
+          </span>
+        </button>
+        <div style={styles.row} className="track-row">
+          <div style={{ ...styles.rowThumb, position: 'relative' }}>
+            {t.cover_image ? (
+              <img src={t.cover_image} alt="" style={styles.rowThumbImg} />
+            ) : (
+              <div style={styles.rowThumbPh}>🎵</div>
+            )}
+            <button
+              style={{ ...styles.rowPlay, opacity: playing ? 1 : undefined }}
+              onClick={() => (playing ? globalPlayerState.togglePlayPause() : playTrack(t))}
+            >
+              {playing ? '⏸' : '▶'}
+            </button>
+            {t.profile_picture && (
+              <img
+                src={t.profile_picture}
+                alt=""
+                style={styles.rowAvatarBadge}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/@${t.username}`);
+                }}
+              />
+            )}
+          </div>
+          <div style={styles.rowInfo} onClick={() => navigate(`/track/${t.id}`)}>
+            <span style={styles.rowTitle}>{t.title}</span>
+            <span
+              style={styles.rowArtist}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/@${t.username}`);
+              }}
+            >
+              {t.display_name || t.username}
+            </span>
+          </div>
+          <div style={styles.waveWrap}>
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.waveBar,
+                  height: `${10 + Math.abs(Math.sin(i * 0.8) * 12)}px`,
+                  background: playing
+                    ? `rgba(94,234,212,${0.25 + (i % 3) * 0.15})`
+                    : `rgba(100,150,200,${0.15 + (i % 3) * 0.1})`,
+                }}
+              />
+            ))}
+          </div>
+          <span style={styles.rowCount}>▶ {formatCount(t.play_count)}</span>
         </div>
       </div>
     );
@@ -506,6 +615,24 @@ const ListenerHome = () => {
                   <div style={styles.trackGrid}>
                     {newReleases.slice(0, 6).map((item, idx) => (
                       <TrackCard key={`nr-${item.type}-${item.id}`} item={item} index={idx + 3} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Reposts from people you follow */}
+              {followingReposts.length > 0 && (
+                <section style={styles.section}>
+                  <div style={styles.sectionHead}>
+                    <h2 style={{ ...styles.sectionTitle, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <RepostIcon size={22} />
+                      From people you follow
+                    </h2>
+                    <span style={styles.sectionSubtle}>Recent reposts</span>
+                  </div>
+                  <div style={styles.followingRepostList}>
+                    {followingReposts.map((fr) => (
+                      <FollowingRepostRow key={`${fr.reposter_username}-${fr.track.id}-${fr.reposted_at}`} item={fr} />
                     ))}
                   </div>
                 </section>
@@ -932,38 +1059,105 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     textDecoration: 'none',
   },
+  sectionSubtle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: 500,
+  },
+  followingRepostList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 16,
+  },
+  followingRepostWrap: {
+    borderRadius: 14,
+    border: '1px solid rgba(94, 234, 212, 0.12)',
+    background: 'rgba(15, 22, 32, 0.5)',
+    overflow: 'hidden',
+  },
+  followingRepostHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    padding: '10px 14px',
+    border: 'none',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+    background: 'rgba(0,0,0,0.2)',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    fontFamily: "'Poppins', sans-serif",
+    fontSize: 13,
+  },
+  followingRepostAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: '50%',
+    objectFit: 'cover' as const,
+    flexShrink: 0,
+  },
+  followingRepostAvatarPh: {
+    width: 28,
+    height: 28,
+    borderRadius: '50%',
+    background: 'rgba(167,139,250,0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 14,
+    flexShrink: 0,
+  },
+  followingRepostHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    lineHeight: 1.35,
+  },
 
   // ── Track grid (Tony's 6-column gradient cards) ───────────────────────────
   trackGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(6, 1fr)',
+    /* minmax(0,1fr) so column width ignores huge image intrinsic sizes — keeps every cell equal */
+    gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
     gap: 16,
   },
   trackCard: {
     cursor: 'pointer',
     transition: 'transform 0.2s',
+    minWidth: 0,
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
   },
   cardImageWrap: {
     position: 'relative',
     width: '100%',
+    minWidth: 0,
     aspectRatio: '1',
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 10,
     background: '#1c1c2e',
     border: '1px solid rgba(167,139,250,0.15)',
+    flexShrink: 0,
   },
   cardImage: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'cover' as const,
+    display: 'block',
   },
   cardGradient: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
   },
   cardPlayBtn: {
     position: 'absolute',
+    zIndex: 2,
     bottom: 8,
     right: 8,
     width: 38,

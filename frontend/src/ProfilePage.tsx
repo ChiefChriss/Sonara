@@ -6,6 +6,7 @@ import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
 import TrackEditModal from './components/TrackEditModal';
+import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 
@@ -40,6 +41,20 @@ interface Track {
   audio_file: string;
   uploaded_at: string;
   cover_image?: string;
+}
+
+interface RepostListEntry {
+  reposted_at: string;
+  track: {
+    id: number;
+    title: string;
+    audio_file: string;
+    uploaded_at?: string;
+    cover_image?: string;
+    username: string;
+    display_name?: string;
+    profile_picture?: string | null;
+  };
 }
 
 const TABS = ['Posts', 'Tracks', 'Playlists', 'Reposts'] as const;
@@ -78,6 +93,8 @@ const ProfilePage = () => {
   const [followList, setFollowList] = useState<FollowUser[]>([]);
   const [followListLoading, setFollowListLoading] = useState(false);
   const [loggedInUsername, setLoggedInUsername] = useState('');
+  const [reposts, setReposts] = useState<RepostListEntry[]>([]);
+  const [repostsLoading, setRepostsLoading] = useState(false);
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
@@ -133,6 +150,24 @@ const ProfilePage = () => {
       setTracksLoading(false);
     }
   }, [API_BASE_URL]);
+
+  const fetchReposts = useCallback(async () => {
+    if (!urlUsername) return;
+    setRepostsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/reposts/`);
+      if (res.ok) {
+        const data = await res.json();
+        setReposts(Array.isArray(data) ? data : []);
+      } else {
+        setReposts([]);
+      }
+    } catch {
+      setReposts([]);
+    } finally {
+      setRepostsLoading(false);
+    }
+  }, [API_BASE_URL, urlUsername]);
 
   const deleteTrack = async (trackId: number) => {
     const accessToken = localStorage.getItem('accessToken');
@@ -196,6 +231,22 @@ const ProfilePage = () => {
       title: track.title, artist: user?.display_name || user?.username || urlUsername || 'Unknown',
       audioUrl: track.audio_file, coverImage: user?.profile_picture || null,
       artistHandle: user?.username || urlUsername || '',
+    });
+  };
+
+  const playRepostedTrack = (t: RepostListEntry['track']) => {
+    if (currentTrack?.id === t.id && currentTrack?.type === 'track') {
+      togglePlayPause();
+      return;
+    }
+    play({
+      id: t.id,
+      type: 'track',
+      title: t.title,
+      artist: t.display_name || t.username,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || t.profile_picture || null,
+      artistHandle: t.username,
     });
   };
 
@@ -349,6 +400,10 @@ const ProfilePage = () => {
   useEffect(() => {
     if (isOwnProfile) fetchTracks();
   }, [fetchTracks, isOwnProfile]);
+
+  useEffect(() => {
+    if (activeTab === 'Reposts') fetchReposts();
+  }, [activeTab, fetchReposts]);
 
   const headerPreviewUrl = useMemo(
     () => (headerFile ? URL.createObjectURL(headerFile) : null),
@@ -885,6 +940,69 @@ const ProfilePage = () => {
                           </button>
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'Reposts' ? (
+            <div>
+              {repostsLoading ? (
+                <p style={styles.comingSoon}>Loading reposts…</p>
+              ) : reposts.length === 0 ? (
+                <p style={styles.comingSoon}>
+                  {isOwnProfile ? 'Repost tracks you love — they’ll show up here.' : 'No reposts yet.'}
+                </p>
+              ) : (
+                <div style={styles.trackList}>
+                  {reposts.map((entry) => (
+                    <div key={`${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                      <div style={styles.repostCardMeta}>
+                        <span style={styles.repostBadge}>
+                            <RepostIcon size={14} active />
+                            <span style={{ marginLeft: 6 }}>Reposted</span>
+                        </span>
+                        <span style={styles.repostDate}>
+                          {new Date(entry.reposted_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                      <div style={styles.trackCard}>
+                        <button
+                          type="button"
+                          onClick={() => playRepostedTrack(entry.track)}
+                          style={styles.playBtn}
+                          aria-label={
+                            currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                              ? 'Pause'
+                              : 'Play'
+                          }
+                        >
+                          {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                            ? '⏸'
+                            : '▶'}
+                        </button>
+                        <div style={styles.trackInfo}>
+                          <span style={styles.trackTitle}>{entry.track.title}</span>
+                          <button
+                            type="button"
+                            style={styles.repostOriginalArtist}
+                            onClick={() => navigate(`/@${entry.track.username}`)}
+                          >
+                            {entry.track.display_name || entry.track.username}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/track/${entry.track.id}`)}
+                          style={styles.repostOpenBtn}
+                        >
+                          Open
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1716,6 +1834,57 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '8px',
+  },
+  repostCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 8,
+    padding: '12px 14px',
+    borderRadius: 14,
+    background: 'rgba(20, 18, 38, 0.55)',
+    border: '1px solid rgba(94, 234, 212, 0.12)',
+  },
+  repostCardMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  repostBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'rgba(94, 234, 212, 0.9)',
+  },
+  repostDate: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
+  repostOriginalArtist: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    textAlign: 'left' as const,
+    fontSize: 13,
+    color: 'rgba(167, 139, 250, 0.85)',
+    cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  repostOpenBtn: {
+    padding: '8px 14px',
+    borderRadius: 9999,
+    border: '1px solid rgba(167, 139, 250, 0.35)',
+    background: 'transparent',
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    flexShrink: 0,
+    fontFamily: "'Poppins', sans-serif",
   },
   trackCard: {
     display: 'flex',

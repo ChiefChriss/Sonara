@@ -2,7 +2,17 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.files.storage import default_storage
-from .models import Track, Project, Publication, Like, TrackLike, Notification
+from .models import (
+    Track,
+    TrackRepost,
+    Project,
+    Publication,
+    Like,
+    TrackLike,
+    Notification,
+    ContentComment,
+    ContentCommentLike,
+)
 
 User = get_user_model()
 
@@ -119,16 +129,42 @@ AUDIO_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
 class TrackSerializer(serializers.ModelSerializer):
     audio_file = serializers.FileField()
     is_liked = serializers.SerializerMethodField()
+    is_reposted = serializers.SerializerMethodField()
 
     class Meta:
         model = Track
-        fields = ('id', 'title', 'audio_file', 'cover_image', 'uploaded_at', 'play_count', 'like_count', 'is_liked')
-        read_only_fields = ('id', 'uploaded_at', 'play_count', 'like_count', 'is_liked')
+        fields = (
+            'id',
+            'title',
+            'audio_file',
+            'cover_image',
+            'uploaded_at',
+            'play_count',
+            'like_count',
+            'repost_count',
+            'is_liked',
+            'is_reposted',
+        )
+        read_only_fields = (
+            'id',
+            'uploaded_at',
+            'play_count',
+            'like_count',
+            'repost_count',
+            'is_liked',
+            'is_reposted',
+        )
 
     def get_is_liked(self, obj):
         request = self.context.get('request')
         if request and request.user and request.user.is_authenticated:
             return TrackLike.objects.filter(user=request.user, track=obj).exists()
+        return False
+
+    def get_is_reposted(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return TrackRepost.objects.filter(user=request.user, track=obj).exists()
         return False
 
     def validate_audio_file(self, value):
@@ -162,17 +198,37 @@ class PublicTrackSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(source='user.display_name', read_only=True)
     profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
     is_liked = serializers.SerializerMethodField()
+    is_reposted = serializers.SerializerMethodField()
 
     class Meta:
         model = Track
-        fields = ('id', 'title', 'audio_file', 'cover_image', 'uploaded_at', 'play_count', 'like_count',
-                  'username', 'display_name', 'profile_picture', 'is_liked')
+        fields = (
+            'id',
+            'title',
+            'audio_file',
+            'cover_image',
+            'uploaded_at',
+            'play_count',
+            'like_count',
+            'repost_count',
+            'username',
+            'display_name',
+            'profile_picture',
+            'is_liked',
+            'is_reposted',
+        )
         read_only_fields = fields
 
     def get_is_liked(self, obj):
         request = self.context.get('request')
         if request and request.user and request.user.is_authenticated:
             return TrackLike.objects.filter(user=request.user, track=obj).exists()
+        return False
+
+    def get_is_reposted(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            return TrackRepost.objects.filter(user=request.user, track=obj).exists()
         return False
 
 
@@ -219,6 +275,67 @@ class PublicationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class ContentCommentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    display_name = serializers.CharField(source='user.display_name', read_only=True, default='')
+    profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
+    like_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ContentComment
+        fields = (
+            'id',
+            'body',
+            'created_at',
+            'parent_id',
+            'username',
+            'display_name',
+            'profile_picture',
+            'like_count',
+            'is_liked',
+        )
+        read_only_fields = (
+            'id',
+            'created_at',
+            'parent_id',
+            'username',
+            'display_name',
+            'profile_picture',
+            'like_count',
+            'is_liked',
+        )
+
+    def get_like_count(self, obj):
+        v = getattr(obj, 'like_count', None)
+        if v is not None:
+            return v
+        return obj.comment_likes.count()
+
+    def get_is_liked(self, obj):
+        v = getattr(obj, 'is_liked', None)
+        if v is not None:
+            return bool(v)
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return ContentCommentLike.objects.filter(comment_id=obj.pk, user_id=request.user.id).exists()
+
+
+class ContentCommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentComment
+        fields = ('body', 'parent_id')
+
+    def validate_body(self, value):
+        value = (value or '').strip()
+        if not value:
+            raise serializers.ValidationError('Comment cannot be empty.')
+        if len(value) > 500:
+            raise serializers.ValidationError('Comment must be 500 characters or less.')
+        return value
 
 
 class NotificationSerializer(serializers.ModelSerializer):

@@ -11,8 +11,10 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from django.db import models as db_models
+from django.db.models import BooleanField, Count, Exists, OuterRef, Q, Value
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.conf import settings
 from django_ratelimit.decorators import ratelimit
@@ -20,8 +22,23 @@ from datetime import datetime, timedelta
 import resend
 import os
 
-from .serializers import UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer, ProjectSerializer, ProjectListSerializer, PublicationSerializer, NotificationSerializer
-from .models import Track, Project, Publication, Like, TrackLike, Follow, Notification
+from .serializers import (
+    UserSerializer, ProfileUpdateSerializer, TrackSerializer, PublicTrackSerializer, PublicProfileSerializer,
+    ProjectSerializer, ProjectListSerializer, PublicationSerializer, NotificationSerializer,
+    ContentCommentSerializer, ContentCommentCreateSerializer,
+)
+from .models import (
+    Track,
+    TrackRepost,
+    Project,
+    Publication,
+    Like,
+    TrackLike,
+    Follow,
+    Notification,
+    ContentComment,
+    ContentCommentLike,
+)
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 User = get_user_model()
@@ -378,13 +395,25 @@ class ToggleFollowView(APIView):
 
         follow, created = Follow.objects.get_or_create(follower=request.user, following=target)
         if created:
-            Notification.objects.create(
-                recipient=target,
+            now = timezone.now()
+            updated = Notification.objects.filter(
                 sender=request.user,
+                recipient=target,
                 notification_type=Notification.FOLLOW,
-            )
+            ).update(is_read=False, created_at=now)
+            if not updated:
+                Notification.objects.create(
+                    recipient=target,
+                    sender=request.user,
+                    notification_type=Notification.FOLLOW,
+                )
             return Response({'following': True, 'follower_count': target.followers_set.count()})
         else:
+            Notification.objects.filter(
+                sender=request.user,
+                recipient=target,
+                notification_type=Notification.FOLLOW,
+            ).delete()
             follow.delete()
             return Response({'following': False, 'follower_count': target.followers_set.count()})
 
@@ -506,17 +535,31 @@ class ToggleLikeView(APIView):
             pub.like_count = db_models.F('like_count') + 1
             pub.save(update_fields=['like_count'])
             pub.refresh_from_db()
-            # Create notification (don't notify yourself)
+            # One notification per (liker, publication); refresh if they liked again after unlike.
             if pub.user != request.user:
-                Notification.objects.create(
-                    recipient=pub.user,
+                now = timezone.now()
+                updated = Notification.objects.filter(
                     sender=request.user,
+                    recipient=pub.user,
                     notification_type=Notification.LIKE_PUBLICATION,
                     publication=pub,
-                )
+                ).update(is_read=False, created_at=now)
+                if not updated:
+                    Notification.objects.create(
+                        recipient=pub.user,
+                        sender=request.user,
+                        notification_type=Notification.LIKE_PUBLICATION,
+                        publication=pub,
+                    )
             return Response({'liked': True, 'like_count': pub.like_count})
         else:
-            # Unlike
+            # Unlike — remove like notification so toggling doesn't stack duplicates
+            Notification.objects.filter(
+                sender=request.user,
+                recipient=pub.user,
+                notification_type=Notification.LIKE_PUBLICATION,
+                publication=pub,
+            ).delete()
             like.delete()
             pub.like_count = db_models.F('like_count') - 1
             pub.save(update_fields=['like_count'])
@@ -582,20 +625,142 @@ class ToggleTrackLikeView(APIView):
             track.like_count = db_models.F('like_count') + 1
             track.save(update_fields=['like_count'])
             track.refresh_from_db()
-            # Create notification (don't notify yourself)
             if track.user != request.user:
-                Notification.objects.create(
-                    recipient=track.user,
+                now = timezone.now()
+                updated = Notification.objects.filter(
                     sender=request.user,
+                    recipient=track.user,
                     notification_type=Notification.LIKE_TRACK,
                     track=track,
-                )
+                ).update(is_read=False, created_at=now)
+                if not updated:
+                    Notification.objects.create(
+                        recipient=track.user,
+                        sender=request.user,
+                        notification_type=Notification.LIKE_TRACK,
+                        track=track,
+                    )
             return Response({'liked': True, 'like_count': track.like_count})
         else:
+            Notification.objects.filter(
+                sender=request.user,
+                recipient=track.user,
+                notification_type=Notification.LIKE_TRACK,
+                track=track,
+            ).delete()
             like.delete()
             track.like_count = db_models.F('like_count') - 1
             track.save(update_fields=['like_count'])
+            track.refresh_from_db()
             return Response({'liked': False, 'like_count': track.like_count})
+
+
+class ToggleTrackRepostView(APIView):
+    """Toggle repost of a track (shows on your profile; creators can repost their own)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            track = Track.objects.get(pk=pk)
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        rp, created = TrackRepost.objects.get_or_create(user=request.user, track=track)
+        if created:
+            track.repost_count = db_models.F('repost_count') + 1
+            track.save(update_fields=['repost_count'])
+            track.refresh_from_db()
+            if track.user_id != request.user.id:
+                now = timezone.now()
+                updated = Notification.objects.filter(
+                    sender=request.user,
+                    recipient=track.user,
+                    notification_type=Notification.REPOST,
+                    track=track,
+                ).update(is_read=False, created_at=now)
+                if not updated:
+                    Notification.objects.create(
+                        recipient=track.user,
+                        sender=request.user,
+                        notification_type=Notification.REPOST,
+                        track=track,
+                    )
+            return Response({'reposted': True, 'repost_count': track.repost_count})
+        Notification.objects.filter(
+            sender=request.user,
+            recipient=track.user,
+            notification_type=Notification.REPOST,
+            track=track,
+        ).delete()
+        rp.delete()
+        track.repost_count = db_models.F('repost_count') - 1
+        track.save(update_fields=['repost_count'])
+        track.refresh_from_db()
+        return Response({'reposted': False, 'repost_count': track.repost_count})
+
+
+class UserRepostsView(APIView):
+    """List tracks a user has reposted (newest first)."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username):
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        reposts = (
+            TrackRepost.objects.filter(user=user)
+            .select_related('track', 'track__user')
+            .order_by('-created_at')[:50]
+        )
+        ctx = {'request': request}
+        return Response(
+            [
+                {
+                    'reposted_at': rp.created_at,
+                    'track': PublicTrackSerializer(rp.track, context=ctx).data,
+                }
+                for rp in reposts
+            ]
+        )
+
+
+def _absolute_media_url(request, file_field):
+    if not file_field:
+        return None
+    rel = file_field.url
+    if rel.startswith('http'):
+        return rel
+    return request.build_absolute_uri(rel)
+
+
+class FollowingRepostsView(APIView):
+    """Tracks recently reposted by people the current user follows."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        following_ids = list(
+            Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+        )
+        if not following_ids:
+            return Response([])
+        reposts = (
+            TrackRepost.objects.filter(user_id__in=following_ids)
+            .select_related('track', 'track__user', 'user')
+            .order_by('-created_at')[:25]
+        )
+        ctx = {'request': request}
+        return Response(
+            [
+                {
+                    'reposted_at': rp.created_at,
+                    'reposter_username': rp.user.username,
+                    'reposter_display_name': rp.user.display_name or '',
+                    'reposter_profile_picture': _absolute_media_url(request, rp.user.profile_picture),
+                    'track': PublicTrackSerializer(rp.track, context=ctx).data,
+                }
+                for rp in reposts
+            ]
+        )
 
 
 # ═══════════════════════════════════════════
@@ -639,6 +804,270 @@ class NewReleasesView(APIView):
 
 
 # ═══════════════════════════════════════════
+# Comments
+# ═══════════════════════════════════════════
+
+_COMMENT_NOTIF_TYPES = (Notification.COMMENT, Notification.COMMENT_REPLY)
+
+
+def _notifications_visible_qs(user):
+    """Comment/reply notifications only if the comment still exists (linked row)."""
+    return Notification.objects.filter(recipient=user).filter(
+        ~Q(notification_type__in=_COMMENT_NOTIF_TYPES) | Q(comment_id__isnull=False),
+    )
+
+
+def _notify_for_new_comment(*, comment, owner, sender, parent, track=None, publication=None):
+    """Notify content owner and/or parent author for a new comment or reply."""
+    assert (track is None) != (publication is None)
+    to_create = []
+    if parent is None:
+        if owner.id != sender.id:
+            n = Notification(
+                recipient=owner,
+                sender=sender,
+                notification_type=Notification.COMMENT,
+                track=track,
+                publication=publication,
+                comment=comment,
+            )
+            to_create.append(n)
+    else:
+        if parent.user_id != sender.id:
+            to_create.append(
+                Notification(
+                    recipient=parent.user,
+                    sender=sender,
+                    notification_type=Notification.COMMENT_REPLY,
+                    track=track,
+                    publication=publication,
+                    comment=comment,
+                )
+            )
+        if owner.id != sender.id and owner.id != parent.user_id:
+            to_create.append(
+                Notification(
+                    recipient=owner,
+                    sender=sender,
+                    notification_type=Notification.COMMENT,
+                    track=track,
+                    publication=publication,
+                    comment=comment,
+                )
+            )
+    if to_create:
+        Notification.objects.bulk_create(to_create)
+
+
+def _comments_queryset_for_track(request, track):
+    qs = ContentComment.objects.filter(track=track).select_related('user')
+    qs = qs.annotate(like_count=Count('comment_likes', distinct=True))
+    if request.user.is_authenticated:
+        qs = qs.annotate(
+            is_liked=Exists(
+                ContentCommentLike.objects.filter(
+                    comment_id=OuterRef('pk'),
+                    user_id=request.user.id,
+                )
+            )
+        )
+    else:
+        qs = qs.annotate(is_liked=Value(False, output_field=BooleanField()))
+    return qs.order_by('created_at')
+
+
+def _comments_queryset_for_publication(request, pub):
+    qs = ContentComment.objects.filter(publication=pub).select_related('user')
+    qs = qs.annotate(like_count=Count('comment_likes', distinct=True))
+    if request.user.is_authenticated:
+        qs = qs.annotate(
+            is_liked=Exists(
+                ContentCommentLike.objects.filter(
+                    comment_id=OuterRef('pk'),
+                    user_id=request.user.id,
+                )
+            )
+        )
+    else:
+        qs = qs.annotate(is_liked=Value(False, output_field=BooleanField()))
+    return qs.order_by('created_at')
+
+
+def _toggle_comment_like(request, comment):
+    like, created = ContentCommentLike.objects.get_or_create(user=request.user, comment=comment)
+    if created:
+        count = comment.comment_likes.count()
+        return Response({'liked': True, 'like_count': count})
+    like.delete()
+    count = comment.comment_likes.count()
+    return Response({'liked': False, 'like_count': count})
+
+
+class TrackCommentsView(APIView):
+    """List or create comments on a track."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        try:
+            track = Track.objects.get(pk=pk)
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        qs = _comments_queryset_for_track(request, track)
+        ctx = {'request': request}
+        return Response(ContentCommentSerializer(qs, many=True, context=ctx).data)
+
+    def post(self, request, pk):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            track = Track.objects.get(pk=pk)
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        ser = ContentCommentCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        parent = None
+        parent_id = ser.validated_data.get('parent_id')
+        if parent_id is not None:
+            try:
+                parent = ContentComment.objects.get(pk=parent_id, track=track)
+            except ContentComment.DoesNotExist:
+                return Response({'parent_id': ['Invalid parent comment.']}, status=status.HTTP_400_BAD_REQUEST)
+            if parent.parent_id is not None:
+                return Response(
+                    {'parent_id': ['You can only reply to top-level comments.']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        comment = ContentComment.objects.create(
+            user=request.user,
+            track=track,
+            body=ser.validated_data['body'],
+            parent=parent,
+        )
+        _notify_for_new_comment(
+            comment=comment,
+            owner=track.user,
+            sender=request.user,
+            parent=parent,
+            track=track,
+            publication=None,
+        )
+        ctx = {'request': request}
+        return Response(ContentCommentSerializer(comment, context=ctx).data, status=status.HTTP_201_CREATED)
+
+
+class TrackCommentDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, comment_id):
+        try:
+            track = Track.objects.get(pk=pk)
+        except Track.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            comment = ContentComment.objects.get(pk=comment_id, track=track)
+        except ContentComment.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        if comment.user_id != request.user.id:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        comment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ToggleTrackCommentLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk, comment_id):
+        try:
+            track = Track.objects.get(pk=pk)
+            comment = ContentComment.objects.get(pk=comment_id, track=track)
+        except (Track.DoesNotExist, ContentComment.DoesNotExist):
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        return _toggle_comment_like(request, comment)
+
+
+class PublicationCommentsView(APIView):
+    """List or create comments on a public publication."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        try:
+            pub = Publication.objects.get(pk=pk, is_public=True)
+        except Publication.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        qs = _comments_queryset_for_publication(request, pub)
+        ctx = {'request': request}
+        return Response(ContentCommentSerializer(qs, many=True, context=ctx).data)
+
+    def post(self, request, pk):
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            pub = Publication.objects.get(pk=pk, is_public=True)
+        except Publication.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        ser = ContentCommentCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        parent = None
+        parent_id = ser.validated_data.get('parent_id')
+        if parent_id is not None:
+            try:
+                parent = ContentComment.objects.get(pk=parent_id, publication=pub)
+            except ContentComment.DoesNotExist:
+                return Response({'parent_id': ['Invalid parent comment.']}, status=status.HTTP_400_BAD_REQUEST)
+            if parent.parent_id is not None:
+                return Response(
+                    {'parent_id': ['You can only reply to top-level comments.']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        comment = ContentComment.objects.create(
+            user=request.user,
+            publication=pub,
+            body=ser.validated_data['body'],
+            parent=parent,
+        )
+        _notify_for_new_comment(
+            comment=comment,
+            owner=pub.user,
+            sender=request.user,
+            parent=parent,
+            track=None,
+            publication=pub,
+        )
+        ctx = {'request': request}
+        return Response(ContentCommentSerializer(comment, context=ctx).data, status=status.HTTP_201_CREATED)
+
+
+class PublicationCommentDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, comment_id):
+        try:
+            pub = Publication.objects.get(pk=pk, is_public=True)
+        except Publication.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            comment = ContentComment.objects.get(pk=comment_id, publication=pub)
+        except ContentComment.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        if comment.user_id != request.user.id:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        comment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TogglePublicationCommentLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk, comment_id):
+        try:
+            pub = Publication.objects.get(pk=pk, is_public=True)
+            comment = ContentComment.objects.get(pk=comment_id, publication=pub)
+        except (Publication.DoesNotExist, ContentComment.DoesNotExist):
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        return _toggle_comment_like(request, comment)
+
+
+# ═══════════════════════════════════════════
 # Notification endpoints
 # ═══════════════════════════════════════════
 
@@ -647,9 +1076,10 @@ class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        notifications = Notification.objects.filter(
-            recipient=request.user
-        ).select_related('sender', 'track', 'publication')[:50]
+        notifications = (
+            _notifications_visible_qs(request.user)
+            .select_related('sender', 'track', 'publication', 'comment')[:50]
+        )
         return Response(NotificationSerializer(notifications, many=True).data)
 
 
@@ -658,7 +1088,7 @@ class NotificationUnreadCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        count = _notifications_visible_qs(request.user).filter(is_read=False).count()
         return Response({'unread_count': count})
 
 
