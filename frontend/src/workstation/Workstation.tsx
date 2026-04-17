@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import useDawStore from './state/dawStore';
 import { initAudio, dispose, play as enginePlay, pause as enginePause } from './engine/TransportSync';
 import { decodeAudioFile } from './utils/AudioUtils';
-import { createProject, saveProject, getProject } from './api/projectApi';
+import { createProject, saveProject, getProject } from './api/ProjectApi';
 import MenuBar from './components/MenuBar';
 import Transport from './components/Transport';
 import TrackRow from './components/TrackRow';
@@ -11,9 +11,19 @@ import Timeline from './components/Timeline';
 import PianoRoll from './components/PianoRoll';
 import HistoryPanel from './components/HistoryPanel';
 import MixerPanel from './components/MixerPanel';
+import MobileDaw from './components/MobileDaw';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const TRACK_LIST_WIDTH = 280;
 const AUTOMATION_LANE_HEIGHT = 60;
+
+interface LibraryItem {
+  itemId: number;
+  itemType: 'track' | 'publication';
+  title: string;
+  artist: string;
+  audioUrl: string;
+}
 
 const DAW = () => {
   const navigate = useNavigate();
@@ -28,6 +38,10 @@ const DAW = () => {
   const [dragTrackIdx, setDragTrackIdx] = useState<number | null>(null);
   const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
   const [emptyDropHover, setEmptyDropHover] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
   const reorderTrack = useDawStore((s) => s.reorderTrack);
   const addAudioClip = useDawStore((s) => s.addAudioClip);
   const bpm = useDawStore((s) => s.bpm);
@@ -76,6 +90,57 @@ const DAW = () => {
       const data = await decodeAudioFile(file, bpm);
       state.addAudioClip(newTrack.id, 0, data.name, data.durationBeats, data.url, data.peaks);
     }
+  };
+
+  const openLibrary = async () => {
+    setShowLibrary(true);
+    if (libraryItems.length > 0) return;
+    setLibraryLoading(true);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/api/auth/purchases/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const items: LibraryItem[] = data.map((p: any) => {
+          const item = p.item_type === 'track' ? p.track : p.publication;
+          return {
+            itemId: item?.id,
+            itemType: p.item_type,
+            title: item?.title || 'Unknown',
+            artist: item?.display_name || item?.username || '',
+            audioUrl: item?.audio_file || '',
+          };
+        }).filter((i: LibraryItem) => i.audioUrl);
+        setLibraryItems(items);
+      }
+    } catch { /* silent */ }
+    setLibraryLoading(false);
+  };
+
+  const importLibraryItem = async (item: LibraryItem) => {
+    const key = `${item.itemType}-${item.itemId}`;
+    setImportingId(key);
+    try {
+      // Fetch the audio file as a blob
+      const res = await fetch(item.audioUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `${item.title}.mp3`, { type: 'audio/mpeg' });
+
+      addTrack('audio');
+      await new Promise((r) => setTimeout(r, 0));
+      const state = useDawStore.getState();
+      const newTrack = state.tracks[state.tracks.length - 1];
+      if (!newTrack || newTrack.type !== 'audio') return;
+      const data = await decodeAudioFile(file, bpm);
+      // Use track title as clip name
+      state.addAudioClip(newTrack.id, 0, item.title, data.durationBeats, data.url, data.peaks);
+    } catch (err) {
+      console.error('Library import failed:', err);
+    }
+    setImportingId(null);
   };
 
   const toggleAutomation = (trackId: number) => {
@@ -264,6 +329,9 @@ const DAW = () => {
   }, []);
 
   const showHistoryPanel = useDawStore((s) => s.showHistoryPanel);
+  const isMobile = useIsMobile();
+
+  if (isMobile) return <MobileDaw />;
 
   return (
     <div style={styles.container}>
@@ -286,9 +354,10 @@ const DAW = () => {
 
               {/* ═══ Header row ═══ */}
               <div style={styles.headerRow}>
-                <div style={styles.trackListHeader}>
-                  <button onClick={() => addTrack('instrument')} style={styles.addTrackButton}>+ Instrument</button>
-                  <button onClick={() => addTrack('audio')} style={styles.addTrackButton}>+ Audio</button>
+                <div className="daw-track-list-header" style={styles.trackListHeader}>
+                  <button className="daw-add-btn" onClick={() => addTrack('instrument')} style={styles.addTrackButton}>+ Instrument</button>
+                  <button className="daw-add-btn" onClick={() => addTrack('audio')} style={styles.addTrackButton}>+ Audio</button>
+                  <button className="daw-add-btn" onClick={openLibrary} style={{ ...styles.addTrackButton, background: 'rgba(236,72,153,0.15)', borderColor: 'rgba(236,72,153,0.4)', color: '#ec4899' }} title="Import from your purchased library">📥 Library</button>
                 </div>
                 <div style={styles.timelineHeaderCell}>
                   <Timeline mode="header" />
@@ -364,7 +433,7 @@ const DAW = () => {
                           <div style={styles.dropIndicator} />
                         )}
 
-                        <div style={{
+                        <div className="daw-track-list-cell" style={{
                           ...styles.trackListCell,
                           height: automationOpen.has(track.id) ? `${80 + 60}px` : '80px',
                           display: 'flex',
@@ -461,6 +530,47 @@ const DAW = () => {
         {/* History panel as flex sibling */}
         <HistoryPanel />
       </div>
+
+      {/* ── Library Import Modal ─────────────────────────────────── */}
+      {showLibrary && (
+        <div style={libStyles.overlay} onClick={() => setShowLibrary(false)}>
+          <div style={libStyles.panel} onClick={e => e.stopPropagation()}>
+            <div style={libStyles.header}>
+              <span style={libStyles.title}>📥 Import from Library</span>
+              <button style={libStyles.closeBtn} onClick={() => setShowLibrary(false)}>✕</button>
+            </div>
+            <p style={libStyles.hint}>Click an item to import it as a new audio track.</p>
+            {libraryLoading ? (
+              <p style={libStyles.empty}>Loading your library...</p>
+            ) : libraryItems.length === 0 ? (
+              <p style={libStyles.empty}>Your library is empty. Purchase tracks from the Marketplace first.</p>
+            ) : (
+              <div style={libStyles.list}>
+                {libraryItems.map(item => {
+                  const key = `${item.itemType}-${item.itemId}`;
+                  const busy = importingId === key;
+                  return (
+                    <div key={key} style={libStyles.row}>
+                      <div style={libStyles.icon}>{item.itemType === 'publication' ? '🎼' : '🎵'}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={libStyles.itemTitle}>{item.title}</p>
+                        <p style={libStyles.itemArtist}>{item.artist}</p>
+                      </div>
+                      <button
+                        style={{ ...libStyles.importBtn, ...(busy ? libStyles.importBtnBusy : {}) }}
+                        onClick={() => !busy && importLibraryItem(item)}
+                        disabled={busy}
+                      >
+                        {busy ? 'Importing...' : '+ Import'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
@@ -630,6 +740,47 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     fontFamily: "'Poppins', sans-serif",
   },
+};
+
+const libStyles: { [key: string]: React.CSSProperties } = {
+  overlay: {
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+    zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  panel: {
+    background: '#1e1e38', border: '1px solid rgba(167,139,250,0.25)',
+    borderRadius: 16, padding: 24, width: 420, maxWidth: '95vw',
+    maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+  },
+  header: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
+  },
+  title: { fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: "'Poppins', sans-serif" },
+  closeBtn: {
+    background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)',
+    fontSize: 16, cursor: 'pointer',
+  },
+  hint: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 16, fontFamily: "'Poppins', sans-serif" },
+  empty: { fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '24px 0', fontFamily: "'Poppins', sans-serif" },
+  list: { overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 },
+  row: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '10px 12px', borderRadius: 10,
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.06)',
+  },
+  icon: { fontSize: 22, flexShrink: 0 },
+  itemTitle: { fontSize: 13, fontWeight: 600, color: '#fff', fontFamily: "'Poppins', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  itemArtist: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'Poppins', sans-serif" },
+  importBtn: {
+    flexShrink: 0, padding: '6px 12px', borderRadius: 8, border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
+    color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+    fontFamily: "'Poppins', sans-serif",
+  },
+  importBtnBusy: { background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', cursor: 'default' },
 };
 
 export default DAW;

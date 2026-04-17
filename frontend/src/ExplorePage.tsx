@@ -5,11 +5,13 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getTrackGradient } from './utils/trackGradient';
 
 interface Track {
   id: number;
   title: string;
   audio_file: string;
+  cover_image: string | null;
   uploaded_at: string;
   play_count: number;
   like_count: number;
@@ -149,7 +151,7 @@ const ExplorePage = () => {
 
   /* ── Sidebar (shared layout) ─────────────────────────────────────────────── */
   const renderSidebar = () => (
-    <nav style={styles.sidebar}>
+    <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
       <div style={styles.sidebarTop}>
         <Link to="/home">
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -160,14 +162,14 @@ const ExplorePage = () => {
           <span style={styles.sidebarIcon as React.CSSProperties}><HomeIcon /></span> Home
         </Link>
         <Link to="/explore" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
-          <span style={styles.sidebarIcon as React.CSSProperties}><TrendingIcon /></span> Trending
+          <span style={styles.sidebarIcon as React.CSSProperties}><TrendingIcon /></span> Tracks
         </Link>
         <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
           <span style={styles.sidebarIcon as React.CSSProperties}><MusicIcon /></span> Create Music
         </Link>
-        <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-          <span style={styles.sidebarIcon as React.CSSProperties}><MarketplaceIcon /></span> Marketplace
-        </div>
+        <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
+        </Link>
         <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
           <span style={styles.sidebarIcon as React.CSSProperties}><BellIcon /></span> Notifications
           {unreadCount > 0 && (
@@ -181,7 +183,8 @@ const ExplorePage = () => {
         </Link>
       </div>
       <div style={styles.sidebarBottom}>
-        <Link to="/create" style={styles.uploadBtn}>Upload Track</Link>
+        <Link to={username ? `/@${username}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>Upload Track</Link>
+        <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
       </div>
     </nav>
   );
@@ -193,6 +196,8 @@ const ExplorePage = () => {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         button:hover { opacity: 0.9; }
         .explore-card:hover { background: rgba(30, 25, 50, 0.55) !important; transform: translateY(-2px); }
+        .explore-card:hover .card-play-btn { opacity: 1 !important; }
+        .card-heart-btn:hover { transform: scale(1.15); }
         .heart-btn:hover { transform: scale(1.15); }
         .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -200,8 +205,8 @@ const ExplorePage = () => {
 
       {renderSidebar()}
 
-      <div style={styles.mainArea}>
-        <div style={styles.main}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="explore-main" style={styles.main}>
           {loading ? (
             <div style={styles.loadingWrap}>
               <div style={styles.spinner} />
@@ -214,47 +219,45 @@ const ExplorePage = () => {
             </div>
           ) : (
             <>
-              <p style={styles.subtitle}>{tracks.length} track{tracks.length !== 1 ? 's' : ''} from the community</p>
-              <div style={styles.grid}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Uploaded Tracks</h2>
+              <div className="track-grid-responsive explore-grid" style={styles.grid}>
                 {tracks.map((track) => (
                   <div key={track.id} className="explore-card" style={styles.card}>
-                    <div style={styles.cardTop}>
+                    <div className="card-img-wrap" style={styles.cardImageWrap} onClick={() => navigate(`/track/${track.id}`)}>
+                      {track.cover_image ? (
+                        <img src={track.cover_image} alt="" style={styles.cardImage} />
+                      ) : (
+                        <div style={{ ...styles.cardGradient, background: getTrackGradient(track.id) }} />
+                      )}
                       <button
-                        type="button"
-                        onClick={() => handlePlayTrack(track)}
-                        style={styles.playBtn}
+                        className="card-play-btn"
+                        style={{ ...styles.cardPlayBtn, opacity: isTrackPlaying(track.id) ? 1 : undefined }}
+                        onClick={(e) => { e.stopPropagation(); handlePlayTrack(track); }}
                       >
                         {isTrackPlaying(track.id) ? '\u23F8' : '\u25B6'}
                       </button>
                       <button
                         type="button"
-                        className="heart-btn"
-                        onClick={() => toggleTrackLike(track.id)}
-                        style={styles.heartBtnInline}
-                        title={track.is_liked ? 'Unlike' : 'Like'}
+                        className="card-heart-btn"
+                        onClick={(e) => { e.stopPropagation(); toggleTrackLike(track.id); }}
+                        style={{ ...styles.cardHeartBtn, color: track.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.7)' }}
                       >
-                        <svg width="20" height="20" viewBox="0 0 24 24"
+                        <svg width="18" height="18" viewBox="0 0 24 24"
                           fill={track.is_liked ? '#ff4d6d' : 'none'}
-                          stroke={track.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
+                          stroke={track.is_liked ? '#ff4d6d' : 'currentColor'}
                           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                         >
                           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                         </svg>
                       </button>
                     </div>
-                    <div style={styles.cardBody}>
+                    <div style={styles.cardBody} onClick={() => navigate(`/track/${track.id}`)}>
                       <span style={styles.trackTitle}>{track.title}</span>
-                      <span
-                        style={styles.trackArtist}
-                        onClick={() => navigate(`/@${track.username}`)}
-                      >
+                      <span style={styles.trackArtist} onClick={(e) => { e.stopPropagation(); navigate(`/@${track.username}`); }}>
                         {track.display_name || `@${track.username}`}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-                        <span style={styles.trackDate}>
-                          {new Date(track.uploaded_at).toLocaleDateString()}
-                        </span>
-                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>
                           {'\u25B6'} {track.play_count}
                         </span>
                         <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -270,46 +273,44 @@ const ExplorePage = () => {
               {/* Published Songs with Like buttons */}
               {publications.length > 0 && (
                 <>
-                  <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '48px', marginBottom: '16px' }}>Published Songs</h2>
-                  <div style={styles.grid}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '48px', marginBottom: '16px' }}>Published Tracks</h2>
+                  <div className="track-grid-responsive explore-grid" style={styles.grid}>
                     {publications.map((pub) => (
                       <div key={pub.id} className="explore-card" style={styles.card}>
-                        <div style={styles.cardTop}>
+                        <div className="card-img-wrap" style={styles.cardImageWrap} onClick={() => navigate(`/publication/${pub.id}`)}>
+                          {pub.cover_image ? (
+                            <img src={pub.cover_image} alt="" style={styles.cardImage} />
+                          ) : (
+                            <div style={{ ...styles.cardGradient, background: getTrackGradient(pub.id) }} />
+                          )}
                           <button
-                            type="button"
-                            onClick={() => handlePlayPub(pub)}
-                            style={styles.playBtn}
+                            className="card-play-btn"
+                            style={{ ...styles.cardPlayBtn, opacity: isPubPlaying(pub.id) ? 1 : undefined }}
+                            onClick={(e) => { e.stopPropagation(); handlePlayPub(pub); }}
                           >
                             {isPubPlaying(pub.id) ? '\u23F8' : '\u25B6'}
                           </button>
                           <button
                             type="button"
-                            className="heart-btn"
-                            onClick={() => toggleLike(pub.id)}
-                            style={styles.heartBtnInline}
-                            title={pub.is_liked ? 'Unlike' : 'Like'}
+                            className="card-heart-btn"
+                            onClick={(e) => { e.stopPropagation(); toggleLike(pub.id); }}
+                            style={{ ...styles.cardHeartBtn, color: pub.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.7)' }}
                           >
-                            <svg width="20" height="20" viewBox="0 0 24 24"
+                            <svg width="18" height="18" viewBox="0 0 24 24"
                               fill={pub.is_liked ? '#ff4d6d' : 'none'}
-                              stroke={pub.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.5)'}
+                              stroke={pub.is_liked ? '#ff4d6d' : 'currentColor'}
                               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                             >
                               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                             </svg>
                           </button>
                         </div>
-                        <div style={styles.cardBody}>
+                        <div style={styles.cardBody} onClick={() => navigate(`/publication/${pub.id}`)}>
                           <span style={styles.trackTitle}>{pub.title}</span>
-                          <span
-                            style={styles.trackArtist}
-                            onClick={() => navigate(`/@${pub.username}`)}
-                          >
+                          <span style={styles.trackArtist} onClick={(e) => { e.stopPropagation(); navigate(`/@${pub.username}`); }}>
                             {pub.display_name || `@${pub.username}`}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-                            <span style={styles.trackDate}>
-                              {new Date(pub.published_at).toLocaleDateString()}
-                            </span>
                             <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                               {pub.like_count}
@@ -345,10 +346,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
-    position: 'sticky' as const,
+    position: 'fixed' as const,
     top: 0,
-    height: '100vh',
-    overflowY: 'auto' as const,
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -392,6 +395,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center' as const,
@@ -412,13 +423,15 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto' as const,
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
   },
 
   /* ── Content area ────────────────────────────────────────────────────────── */
   main: {
     maxWidth: '1100px',
     margin: '0 auto',
-    padding: '32px 24px',
+    padding: '32px 24px 64px',
     position: 'relative' as const,
     zIndex: 1,
   },
@@ -475,18 +488,64 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '16px',
   },
   card: {
-    padding: '16px',
     borderRadius: '16px',
     background: 'rgba(30, 25, 50, 0.35)',
     border: '1px solid rgba(167, 139, 250, 0.15)',
     transition: 'background 0.2s, transform 0.2s',
     cursor: 'default',
+    overflow: 'hidden',
   },
-  cardTop: {
+  cardImageWrap: {
+    position: 'relative' as const,
+    width: '100%',
+    aspectRatio: '1',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+  },
+  cardGradient: {
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(135deg, #1a1035, #2d1b69, #4c1d95)',
+  },
+  cardPlayBtn: {
+    position: 'absolute' as const,
+    bottom: 10,
+    left: 10,
+    width: 40,
+    height: 40,
+    borderRadius: '50%',
+    border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
+    color: '#fff',
+    fontSize: 16,
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '14px',
+    justifyContent: 'center',
+    opacity: 0,
+    transition: 'opacity 0.15s',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+  },
+  cardHeartBtn: {
+    position: 'absolute' as const,
+    top: 10,
+    right: 10,
+    background: 'rgba(0,0,0,0.4)',
+    backdropFilter: 'blur(8px)',
+    border: 'none',
+    borderRadius: '50%',
+    width: 32,
+    height: 32,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'transform 0.15s',
   },
   playBtn: {
     width: '44px',
@@ -524,6 +583,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '4px',
+    padding: '12px 14px 14px',
+    cursor: 'pointer',
   },
   trackTitle: {
     fontSize: '15px',

@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { useNotificationStore } from './stores/notificationStore';
+import { usePlayerStore } from './stores/playerStore';
+import { getUserGradient } from './utils/userGradient';
 
 interface SearchUser {
   id: number;
@@ -35,6 +37,7 @@ interface SearchPublication {
 
 const SearchPage = () => {
   const navigate = useNavigate();
+  const { currentTrack } = usePlayerStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
 
@@ -143,7 +146,7 @@ const SearchPage = () => {
       `}</style>
 
       {/* Sidebar */}
-      <nav style={styles.sidebar}>
+      <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/home">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -154,14 +157,14 @@ const SearchPage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -182,12 +185,13 @@ const SearchPage = () => {
           <Link to="/upload" style={styles.uploadBtn}>
             Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </nav>
 
       {/* Main Area */}
-      <div style={styles.mainArea}>
-        <div style={styles.searchBarSection}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="search-bar-section" style={styles.searchBarSection}>
           <div style={styles.searchBarWrap}>
             <input
               type="text"
@@ -202,7 +206,7 @@ const SearchPage = () => {
           </div>
         </div>
 
-        <div style={styles.main}>
+        <div className="search-results" style={styles.main}>
           {!hasSearched && !loading && (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>Search for users, tracks, or posts</p>
@@ -229,8 +233,8 @@ const SearchPage = () => {
                     {u.profile_picture ? (
                       <img src={u.profile_picture} alt="" style={styles.userAvatar} />
                     ) : (
-                      <div style={styles.userAvatarPlaceholder}>
-                        <span style={{ fontSize: '24px', opacity: 0.6 }}>👤</span>
+                      <div style={{...styles.userAvatarPlaceholder, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 18}}>
+                        {u.username ? u.username[0].toUpperCase() : '?'}
                       </div>
                     )}
                     <div style={styles.userInfo}>
@@ -352,10 +356,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -395,6 +401,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center',
@@ -415,6 +429,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto',
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
   },
   searchBarSection: {
     position: 'sticky',

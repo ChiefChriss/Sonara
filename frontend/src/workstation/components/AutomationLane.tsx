@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useDawStore from '../state/dawStore';
-import { AutomationPoint } from '../models/types';
+import { AutomationPoint } from '../models/Types';
 
 const LANE_HEIGHT = 60;
 

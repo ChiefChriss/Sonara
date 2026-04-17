@@ -144,6 +144,8 @@ class TrackSerializer(serializers.ModelSerializer):
             'repost_count',
             'is_liked',
             'is_reposted',
+            'price',
+            'for_sale',
         )
         read_only_fields = (
             'id',
@@ -166,6 +168,15 @@ class TrackSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             return TrackRepost.objects.filter(user=request.user, track=obj).exists()
         return False
+
+    def to_internal_value(self, data):
+        # Coerce 'true'/'false' strings from multipart for boolean fields
+        # Avoid data.copy() -- deepcopy fails on file uploads in Python 3.14
+        if hasattr(data, '_mutable'):
+            data._mutable = True
+        if 'for_sale' in data:
+            data['for_sale'] = coerce_bool(data.get('for_sale'))
+        return super().to_internal_value(data)
 
     def validate_audio_file(self, value):
         if value.content_type not in ALLOWED_AUDIO_TYPES:
@@ -216,6 +227,8 @@ class PublicTrackSerializer(serializers.ModelSerializer):
             'profile_picture',
             'is_liked',
             'is_reposted',
+            'price',
+            'for_sale',
         )
         read_only_fields = fields
 
@@ -262,7 +275,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'description', 'audio_file', 'cover_image',
             'is_public', 'play_count', 'like_count', 'published_at',
-            'project', 'username', 'display_name', 'profile_picture', 'is_liked',
+            'project', 'username', 'display_name', 'profile_picture', 'is_liked', 'price', 'for_sale',
         )
         read_only_fields = ('id', 'play_count', 'like_count', 'published_at', 'username', 'display_name', 'profile_picture', 'is_liked')
 
@@ -271,6 +284,13 @@ class PublicationSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             return Like.objects.filter(user=request.user, publication=obj).exists()
         return False
+
+    def to_internal_value(self, data):
+        if hasattr(data, '_mutable'):
+            data._mutable = True
+        if 'for_sale' in data:
+            data['for_sale'] = coerce_bool(data.get('for_sale'))
+        return super().to_internal_value(data)
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
@@ -353,5 +373,6 @@ class NotificationSerializer(serializers.ModelSerializer):
             'id', 'notification_type', 'is_read', 'created_at',
             'sender_username', 'sender_display_name', 'sender_profile_picture',
             'track_title', 'track_id', 'publication_title', 'publication_id',
+            'amount',
         )
         read_only_fields = fields

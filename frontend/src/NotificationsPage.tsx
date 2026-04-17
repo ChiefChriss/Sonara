@@ -4,7 +4,9 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
+import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getUserGradient } from './utils/userGradient';
 
 interface Notification {
   id: number;
@@ -18,12 +20,14 @@ interface Notification {
   track_id: number | null;
   publication_title: string | null;
   publication_id: number | null;
+  amount: string | null;
 }
 
 type TabFilter = 'all' | 'likes' | 'follows' | 'comments';
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
+  const { currentTrack } = usePlayerStore();
   const [username, setUsername] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadIds, setUnreadIds] = useState<Set<number>>(new Set());
@@ -85,7 +89,7 @@ const NotificationsPage = () => {
     if (activeTab === 'likes') return n.notification_type === 'like_track' || n.notification_type === 'like_publication';
     if (activeTab === 'follows') return n.notification_type === 'follow';
     if (activeTab === 'comments') {
-      return n.notification_type === 'comment' || n.notification_type === 'comment_reply';
+      return n.notification_type === 'comment' || n.notification_type === 'comment_reply' || n.notification_type === 'mention';
     }
     return true;
   });
@@ -168,8 +172,21 @@ const NotificationsPage = () => {
         const piece = n.track_title || n.publication_title || 'your song';
         return <><strong>{name}</strong> replied to your comment on <strong>{piece}</strong></>;
       }
+      case 'purchase': {
+        const piece = n.track_title || n.publication_title || 'your song';
+        const priceLabel = n.amount == null
+          ? ''
+          : parseFloat(n.amount) === 0
+            ? ' for free'
+            : ` for $${parseFloat(n.amount).toFixed(2)}`;
+        return <><strong>{name}</strong> purchased <strong>{piece}</strong>{priceLabel}</>;
+      }
       case 'repost':
         return <><strong>{name}</strong> reposted your song</>;
+      case 'mention': {
+        const piece = n.track_title || n.publication_title || 'a song';
+        return <><strong>{name}</strong> mentioned you in a comment on <strong>{piece}</strong></>;
+      }
       default:
         return <><strong>{name}</strong> interacted with your content</>;
     }
@@ -189,6 +206,10 @@ const NotificationsPage = () => {
       case 'comment':
       case 'comment_reply':
         return <span style={{ fontSize: 14 }}>💬</span>;
+      case 'mention':
+        return <span style={{ fontSize: 14 }}>@</span>;
+      case 'purchase':
+        return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>;
       case 'repost':
         return <RepostIcon size={16} active />;
       default:
@@ -221,13 +242,13 @@ const NotificationsPage = () => {
   const unreadLikes = notifications.filter((n) => isUnread(n) && (n.notification_type === 'like_track' || n.notification_type === 'like_publication')).length;
   const unreadFollows = notifications.filter((n) => isUnread(n) && n.notification_type === 'follow').length;
   const unreadComments = notifications.filter(
-    (n) => isUnread(n) && (n.notification_type === 'comment' || n.notification_type === 'comment_reply'),
+    (n) => isUnread(n) && (n.notification_type === 'comment' || n.notification_type === 'comment_reply' || n.notification_type === 'mention'),
   ).length;
 
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <aside style={styles.sidebar}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -237,14 +258,14 @@ const NotificationsPage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
           </div>
@@ -257,19 +278,16 @@ const NotificationsPage = () => {
           <Link to="/create" style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* Main area */}
-      <div style={styles.mainArea}>
-        <header style={styles.topBar}>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Notifications</h1>
-        </header>
-
-        <div style={styles.contentWrapper}>
-          <div style={styles.mainContent}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="notif-content" style={styles.contentWrapper}>
+          <div className="notif-main" style={styles.mainContent}>
             {/* Tabs */}
-            <div style={styles.tabBar}>
+            <div className="notif-tabs" style={styles.tabBar}>
               {([
                 { key: 'all' as TabFilter, label: 'All', count: unreadAll },
                 { key: 'likes' as TabFilter, label: 'Likes', count: unreadLikes },
@@ -330,7 +348,7 @@ const NotificationsPage = () => {
                 {filtered.map((n) => (
                   <div
                     key={n.id}
-                    className="notif-row"
+                    className="notif-row notif-item"
                     style={{
                       ...styles.notifRow,
                       ...(isUnread(n) ? styles.notifRowUnread : styles.notifRowRead),
@@ -345,7 +363,7 @@ const NotificationsPage = () => {
                           borderColor: isUnread(n) ? 'rgba(167,139,250,0.5)' : 'rgba(167,139,250,0.2)',
                         }} />
                       ) : (
-                        <div style={styles.notifAvatarPh}><ProfileIcon color="#ec4899" /></div>
+                        <div style={{...styles.notifAvatarPh, background: getUserGradient(n.sender_username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 20}}>{n.sender_username ? n.sender_username[0].toUpperCase() : '?'}</div>
                       )}
                       <div style={styles.notifIconBadge}>
                         {getNotificationIcon(n.notification_type)}
@@ -403,10 +421,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -450,6 +470,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center',
@@ -471,19 +499,9 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-  },
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 64,
-    padding: '0 32px',
-    background: 'rgba(19,19,31,0.92)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(167,139,250,0.12)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
+    overflowY: 'auto',
   },
   contentWrapper: {
     flex: 1,

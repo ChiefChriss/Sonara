@@ -1,0 +1,359 @@
+/* ── Hide scrollbar on body (scroll lives in .main-area instead) ──────── */
+html, body {
+  overflow: hidden;
+  height: 100vh;
+  margin: 0;
+}
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a78bfa 0%, #6366f1 40%, #ec4899 100%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #c4b5fd 0%, #818cf8 40%, #f472b6 100%);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #ddd6fe 0%, #a5b4fc 40%, #f9a8d4 100%);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #7c3aed transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MOBILE  —  Spotify-style clean layout
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ── Global resets ─────────────────────────────────────────────────────── */
+  .desktop-sidebar {
+    display: none !important;
+  }
+
+  .sidebar-main {
+    margin-left: 0 !important;
+    height: 100vh !important;
+    padding-bottom: 130px !important;
+    overflow-x: hidden !important;
+  }
+
+  .topbar-header {
+    margin-left: 0 !important;
+    padding: 0 16px !important;
+    height: 52px !important;
+  }
+
+  /* ── Consistent content padding ────────────────────────────────────────── */
+  .content-padding {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* ── Hero banners ──────────────────────────────────────────────────────── */
+  .hero-responsive {
+    height: 120px !important;
+  }
+  .hero-title-responsive {
+    font-size: 20px !important;
+  }
+  .hero-subtitle-responsive {
+    font-size: 12px !important;
+  }
+
+  /* ── Featured card: stack vertically ───────────────────────────────────── */
+  .featured-responsive {
+    flex-direction: column !important;
+    padding: 14px !important;
+    gap: 14px !important;
+  }
+  .featured-left-responsive {
+    width: 100% !important;
+    height: 180px !important;
+    border-radius: 10px !important;
+  }
+
+  /* ── Track grids: 2 columns ────────────────────────────────────────────── */
+  .track-grid-responsive {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* ── Section titles ────────────────────────────────────────────────────── */
+  .section-title-responsive {
+    font-size: 17px !important;
+  }
+
+  /* ── Search input full width ───────────────────────────────────────────── */
+  .search-wrap-responsive {
+    max-width: 100% !important;
+  }
+
+  /* ── Profile page ──────────────────────────────────────────────────────── */
+  .profile-cover-responsive {
+    height: 140px !important;
+  }
+  .profile-avatar-responsive {
+    width: 80px !important;
+    height: 80px !important;
+    margin-top: -44px !important;
+  }
+
+  /* ── Modals: full-width on mobile ──────────────────────────────────────── */
+  .modal-responsive {
+    width: calc(100% - 24px) !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* ══ ContentPage (track detail) ════════════════════════════════════════ */
+  .content-hero-box {
+    padding: 12px 0 16px !important;
+    overflow: hidden !important;
+  }
+  .content-hero-outer {
+    padding: 0 12px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .content-hero-card {
+    padding: 14px !important;
+    border-radius: 12px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  .content-hero-top {
+    flex-direction: column !important;
+    gap: 16px !important;
+    align-items: stretch !important;
+  }
+  .content-cover-wrap {
+    width: 100% !important;
+    height: 200px !important;
+    border-radius: 10px !important;
+  }
+  .content-title-row {
+    gap: 12px !important;
+  }
+  .content-play-btn {
+    width: 48px !important;
+    height: 48px !important;
+    flex-shrink: 0 !important;
+  }
+  .content-play-btn svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  .content-hero-title {
+    font-size: 20px !important;
+    word-break: break-word !important;
+  }
+  .content-hero-artist {
+    font-size: 15px !important;
+  }
+  .content-stats-row {
+    gap: 8px !important;
+  }
+  .content-stats-row > * {
+    font-size: 12px !important;
+    padding: 5px 8px !important;
+  }
+  .content-wave-band {
+    margin-top: 16px !important;
+    padding-top: 14px !important;
+  }
+  .content-comments-outer {
+    padding: 16px 14px 160px !important;
+  }
+
+  /* Comment section */
+  .comment-composer {
+    padding: 10px !important;
+    border-radius: 10px !important;
+    margin-bottom: 14px !important;
+  }
+  .comment-textarea {
+    min-height: 40px !important;
+    max-height: 80px !important;
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+    resize: none !important;
+  }
+  .comment-composer-meta {
+    margin-top: 4px !important;
+  }
+  .comment-composer-row {
+    margin-top: 6px !important;
+    gap: 8px !important;
+  }
+  .comment-submit-btn {
+    padding: 7px 16px !important;
+    font-size: 12px !important;
+  }
+  .comment-item {
+    padding: 10px !important;
+    gap: 8px !important;
+    border-radius: 10px !important;
+  }
+  .comment-reply-box {
+    margin-left: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ══ DAW / Workstation ═════════════════════════════════════════════════ */
+  .daw-track-list-header,
+  .daw-track-list-cell {
+    width: 180px !important;
+  }
+  .daw-add-btn {
+    font-size: 11px !important;
+    padding: 2px 6px !important;
+  }
+  .daw-menu-bar {
+    flex-wrap: wrap !important;
+    height: auto !important;
+    min-height: 36px !important;
+    padding: 4px 8px !important;
+    gap: 4px !important;
+  }
+  .daw-transport {
+    flex-wrap: wrap !important;
+    height: auto !important;
+    min-height: 40px !important;
+    padding: 4px 8px !important;
+    gap: 6px !important;
+    justify-content: center !important;
+  }
+
+  /* ══ Create page ═══════════════════════════════════════════════════════ */
+  .create-content {
+    padding: 24px 16px !important;
+    max-width: 100% !important;
+  }
+  .create-btn {
+    padding: 16px 20px !important;
+    font-size: 16px !important;
+    border-radius: 12px !important;
+  }
+  .create-project-title {
+    max-width: 100% !important;
+  }
+  .create-project-card {
+    padding: 14px 16px !important;
+  }
+
+  /* ══ Explore page ══════════════════════════════════════════════════════ */
+  .explore-main {
+    padding: 20px 16px 160px !important;
+    max-width: 100% !important;
+  }
+  .explore-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* ══ Notifications ═════════════════════════════════════════════════════ */
+  .notif-content {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  .notif-main {
+    padding: 16px 14px 160px !important;
+  }
+  .notif-tabs {
+    padding: 0 14px !important;
+    gap: 0 !important;
+    justify-content: stretch !important;
+  }
+  .notif-tabs > button {
+    flex: 1 !important;
+    font-size: 12px !important;
+    padding: 10px 6px !important;
+  }
+  .notif-item {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+
+  /* ══ Search page ═══════════════════════════════════════════════════════ */
+  .search-bar-section {
+    padding: 16px 14px !important;
+  }
+  .search-results {
+    padding: 0 14px 160px !important;
+    max-width: 100% !important;
+  }
+
+  /* ══ Library page ══════════════════════════════════════════════════════ */
+  .library-main {
+    padding: 20px 14px 160px !important;
+    max-width: 100% !important;
+  }
+
+  /* ══ Profile page content ══════════════════════════════════════════════ */
+  .profile-tab-content {
+    padding: 20px 14px !important;
+  }
+  .profile-track-card {
+    padding: 12px !important;
+    border-radius: 12px !important;
+    gap: 10px !important;
+  }
+  .profile-info-section {
+    padding: 12px 14px 16px !important;
+  }
+  .profile-tab-bar {
+    padding: 0 14px !important;
+  }
+  .profile-tab-bar > button {
+    flex: 1 !important;
+    font-size: 13px !important;
+  }
+
+  /* ══ Marketplace page ══════════════════════════════════════════════════ */
+  .marketplace-main {
+    padding: 20px 14px 160px !important;
+    max-width: 100% !important;
+  }
+  .marketplace-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+}
+
+/* Small phones */
+@media (max-width: 400px) {
+  .track-grid-responsive,
+  .explore-grid,
+  .marketplace-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

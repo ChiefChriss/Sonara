@@ -106,12 +106,16 @@ export async function publishSong(
   description: string,
   projectId?: number,
   coverImage?: File,
+  price?: number,
+  forSale?: boolean,
 ): Promise<Publication> {
   const formData = new FormData();
   formData.append('audio_file', audioBlob, `${title}.mp3`);
   formData.append('title', title);
   formData.append('description', description);
   formData.append('is_public', 'true');
+  formData.append('price', (price ?? 0).toFixed(2));
+  formData.append('for_sale', forSale ? 'true' : 'false');
   if (projectId) formData.append('project', String(projectId));
   if (coverImage) formData.append('cover_image', coverImage);
 

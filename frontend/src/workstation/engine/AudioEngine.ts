@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
-import { Track, MidiNote, InstrumentPreset } from '../models/types';
-import { getPreset, InstrumentPresetDef } from '../models/presets';
+import { Track, MidiNote, InstrumentPreset } from '../models/Types';
+import { getPreset, InstrumentPresetDef } from '../models/Presets';
 
 // Convert MIDI note number to note name (e.g. 60 -> 'C4')
 const midiToNote = (midi: number): string => {

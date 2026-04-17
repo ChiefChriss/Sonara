@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import useDawStore from '../state/dawStore';
-import { Clip } from '../models/types';
+import { Clip } from '../models/Types';
 import { seek as seekTo } from '../engine/TransportSync';
 import { decodeAudioFile } from '../utils/AudioUtils';
 import { parseMidiFile, midiToClipNotes } from '../engine/MidiParser';

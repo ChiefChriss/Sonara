@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
+import Footer from './components/Footer';
 
 const ResetPassword = () => {
   const [password, setPassword] = useState<string>('');
@@ -149,6 +150,10 @@ const ResetPassword = () => {
         <p style={styles.backText}>
           Remember your password? <Link to="/login" style={styles.backLink}>Login</Link>
         </p>
+      </div>
+
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 1 }}>
+        <Footer />
       </div>
 
       <style>{`

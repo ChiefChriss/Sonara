@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import useDawStore from '../state/dawStore';
 import { exportToWav, exportToMp3, renderToMp3Blob } from '../engine/ExportEngine';
 import { parseMidiFile, midiToClipNotes } from '../engine/MidiParser';
-import { createProject, saveProject, publishSong } from '../api/projectApi';
+import { createProject, saveProject, publishSong } from '../api/ProjectApi';
 
 // ─── Modal Component ───
 
@@ -140,6 +140,194 @@ const ShortcutsContent: React.FC = () => (
   </div>
 );
 
+// ─── Publish Modal ───
+
+interface PublishFormProps {
+  defaultTitle: string;
+  onClose: () => void;
+}
+
+const PublishForm: React.FC<PublishFormProps> = ({ defaultTitle, onClose }) => {
+  const [title, setTitle] = useState(defaultTitle);
+  const [description, setDescription] = useState('');
+  const [forSale, setForSale] = useState(false);
+  const [price, setPrice] = useState('0');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'rendering' | 'uploading' | 'done' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCover = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    setStatus('rendering');
+    setErrorMsg('');
+    try {
+      const state = useDawStore.getState();
+      const data = state.getProjectData();
+      let projId = state.serverProjectId;
+      if (projId) {
+        await saveProject(projId, state.projectName, data);
+      } else {
+        const proj = await createProject(state.projectName, data);
+        projId = proj.id;
+        state.setServerProjectId(proj.id);
+        window.history.replaceState(null, '', `/workstation/${proj.id}`);
+      }
+
+      const audioBlob = await renderToMp3Blob();
+      setStatus('uploading');
+
+      const priceVal = forSale ? Math.max(0, parseFloat(price) || 0) : 0;
+      await publishSong(audioBlob, title.trim(), description, projId || undefined, coverFile || undefined, priceVal, forSale);
+      setStatus('done');
+    } catch (err) {
+      console.error('Publish failed:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Publish failed. Make sure you are logged in.');
+      setStatus('error');
+    }
+  };
+
+  if (status === 'done') {
+    return (
+      <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+        <p style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 6, fontFamily: "'Poppins', sans-serif" }}>Published!</p>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 20, fontFamily: "'Poppins', sans-serif" }}>
+          Your song is now live on your profile{forSale ? ' and listed in the Marketplace' : ''}.
+        </p>
+        <button onClick={onClose} style={pStyles.primaryBtn}>Done</button>
+      </div>
+    );
+  }
+
+  const busy = status === 'rendering' || status === 'uploading';
+  const statusLabel = status === 'rendering' ? 'Rendering audio…' : status === 'uploading' ? 'Uploading…' : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Cover + Title row */}
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <div
+          style={pStyles.coverBox}
+          onClick={() => !busy && coverInputRef.current?.click()}
+          title="Upload cover image"
+        >
+          {coverPreview
+            ? <img src={coverPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+            : <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 1.4, fontFamily: "'Poppins', sans-serif", padding: '0 8px' }}>Upload song cover</span>}
+        </div>
+        <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCover} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={pStyles.label}>Title</label>
+            <input
+              style={pStyles.input}
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Song title"
+              disabled={busy}
+            />
+          </div>
+          <div>
+            <label style={pStyles.label}>Description</label>
+            <textarea
+              style={{ ...pStyles.input, resize: 'none', height: 56 }}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Optional description…"
+              disabled={busy}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Marketplace toggle */}
+      <div style={pStyles.toggleRow}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 2, fontFamily: "'Poppins', sans-serif" }}>List on Marketplace</p>
+          <p style={{ fontSize: 11, color: '#666', fontFamily: "'Poppins', sans-serif" }}>Allow other users to buy this publication</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => !busy && setForSale(v => !v)}
+          style={{
+            width: 42, height: 24, borderRadius: 12, border: 'none', cursor: busy ? 'default' : 'pointer',
+            background: forSale ? 'linear-gradient(135deg, #a78bfa, #ec4899)' : 'rgba(255,255,255,0.15)',
+            position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+          }}
+        >
+          <span style={{
+            position: 'absolute', top: 4, left: forSale ? 22 : 4,
+            width: 16, height: 16, borderRadius: '50%', background: '#fff',
+            transition: 'left 0.2s',
+          }} />
+        </button>
+      </div>
+
+      {/* Price (only when for sale) */}
+      {forSale && (
+        <div>
+          <label style={pStyles.label}>Price (USD) — enter 0 for free</label>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#666', fontSize: 14 }}>$</span>
+            <input
+              style={{ ...pStyles.input, paddingLeft: 26 }}
+              type="text"
+              inputMode="decimal"
+              value={price}
+              onChange={e => {
+                const v = e.target.value;
+                if (/^\d*\.?\d{0,2}$/.test(v)) setPrice(v);
+              }}
+              onKeyDown={e => {
+                const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
+                if (allowed.includes(e.key)) return;
+                if (/^\d$/.test(e.key)) return;
+                if (e.key === '.' && !price.includes('.')) return;
+                e.preventDefault();
+              }}
+              placeholder="0.00"
+              disabled={busy}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {status === 'error' && (
+        <p style={{ fontSize: 12, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '8px 12px', borderRadius: 8 }}>
+          {errorMsg}
+        </p>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+        <button style={pStyles.cancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+        <button style={{ ...pStyles.primaryBtn, flex: 1, opacity: busy || !title.trim() ? 0.6 : 1 }} onClick={handleSubmit} disabled={busy || !title.trim()}>
+          {statusLabel ?? (forSale ? 'Publish & List' : 'Publish')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const pStyles: { [key: string]: React.CSSProperties } = {
+  label: { fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 5, fontFamily: "'Poppins', sans-serif" },
+  input: { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, fontFamily: "'Poppins', sans-serif", outline: 'none' },
+  coverBox: { width: 96, height: 96, borderRadius: 8, border: '1.5px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, overflow: 'hidden', fontFamily: "'Poppins', sans-serif" },
+  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '12px 14px', fontFamily: "'Poppins', sans-serif" },
+  primaryBtn: { padding: '10px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: "'Poppins', sans-serif" },
+  cancelBtn: { padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: "'Poppins', sans-serif" },
+};
+
 // ─── About Content ───
 
 const AboutContent: React.FC = () => (
@@ -273,7 +461,7 @@ const MenuBar: React.FC = () => {
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [modal, setModal] = useState<'shortcuts' | 'about' | null>(null);
+  const [modal, setModal] = useState<'shortcuts' | 'about' | 'publish' | null>(null);
 
   const fileRef = useRef<HTMLButtonElement | null>(null);
   const editRef = useRef<HTMLButtonElement | null>(null);
@@ -319,37 +507,7 @@ const MenuBar: React.FC = () => {
     }
   };
 
-  const handlePublish = async () => {
-    const state = useDawStore.getState();
-    const title = prompt('Song title:', state.projectName);
-    if (!title) return;
-    const description = prompt('Description (optional):', '') || '';
-
-    setIsExporting(true);
-    try {
-      // Save project first
-      const data = state.getProjectData();
-      let projId = state.serverProjectId;
-      if (projId) {
-        await saveProject(projId, state.projectName, data);
-      } else {
-        const proj = await createProject(state.projectName, data);
-        projId = proj.id;
-        state.setServerProjectId(proj.id);
-      }
-
-      // Render to MP3 blob
-      const audioBlob = await renderToMp3Blob();
-
-      // Publish
-      await publishSong(audioBlob, title, description, projId || undefined);
-      alert('Song published to your profile!');
-    } catch (err) {
-      console.error('Publish failed:', err);
-      alert('Failed to publish. Make sure you are logged in.');
-    }
-    setIsExporting(false);
-  };
+  const handlePublish = () => setModal('publish');
 
   const handleImportMidi = () => {
     const input = document.createElement('input');
@@ -471,7 +629,7 @@ const MenuBar: React.FC = () => {
 
   return (
     <>
-      <div style={styles.menuBar}>
+      <div className="daw-menu-bar" style={styles.menuBar}>
         <div style={styles.menuLeft}>
           <button onClick={() => navigate('/create')} style={styles.menuButton}>↩ Exit</button>
           <span style={styles.menuDivider}>|</span>
@@ -505,6 +663,11 @@ const MenuBar: React.FC = () => {
       {modal === 'about' && (
         <Modal title="About" onClose={() => setModal(null)} width={340}>
           <AboutContent />
+        </Modal>
+      )}
+      {modal === 'publish' && (
+        <Modal title="Publish Song" onClose={() => setModal(null)} width={480}>
+          <PublishForm defaultTitle={projectName} onClose={() => setModal(null)} />
         </Modal>
       )}
     </>

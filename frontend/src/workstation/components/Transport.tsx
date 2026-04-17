@@ -61,7 +61,7 @@ const Transport: React.FC = () => {
   const toggleLoop = useDawStore((s) => s.toggleLoop);
 
   return (
-    <div style={styles.transportBar}>
+    <div className="daw-transport" style={styles.transportBar}>
       <div style={styles.transportLeft}>
         <button
           onClick={undo}

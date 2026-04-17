@@ -11,7 +11,7 @@ interface TrackRowProps {
   onToggleAutomation?: () => void;
 }
 
-import { getPreset, getPresetsByCategory, PRESETS } from '../models/presets';
+import { getPreset, getPresetsByCategory, PRESETS } from '../models/Presets';
 
 const TRACK_COLORS = [
   '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',

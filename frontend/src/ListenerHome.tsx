@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
@@ -6,6 +6,10 @@ import { useNotificationStore } from './stores/notificationStore';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import RepostIcon from './components/RepostIcon';
+import TrackPageWaveform from './components/TrackPageWaveform';
+import { getTrackGradient } from './utils/trackGradient';
+import { getUserGradient } from './utils/userGradient';
+import Footer from './components/Footer';
 
 // ── Interfaces (Chris) ──────────────────────────────────────────────────────
 
@@ -20,20 +24,15 @@ interface Track {
   type: 'track' | 'publication';
   play_count?: number;
   like_count?: number;
+  is_liked?: boolean;
   uploaded_at?: string;
   published_at?: string;
 }
 
-interface SearchUser {
-  id: number;
-  username: string;
-  profile_picture: string | null;
-  bio: string;
-  role: string;
-}
-
 interface FollowingRepostItem {
-  reposted_at: string;
+  activity_type?: 'repost' | 'upload';
+  timestamp?: string;
+  reposted_at?: string;
   reposter_username: string;
   reposter_display_name: string;
   reposter_profile_picture: string | null;
@@ -52,40 +51,18 @@ const repostTimeAgo = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString();
 };
 
-// ── Gradient palette for cards without cover images (Tony) ───────────────────
-
-const CARD_GRADIENTS = [
-  'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
-  'linear-gradient(135deg, #ec4899 0%, #f59e0b 100%)',
-  'linear-gradient(135deg, #34d399 0%, #3b82f6 100%)',
-  'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)',
-  'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
-  'linear-gradient(135deg, #14b8a6 0%, #a78bfa 100%)',
-];
-
-const getGradient = (id: number) => CARD_GRADIENTS[id % CARD_GRADIENTS.length];
+// ── Gradient palette removed – now using getTrackGradient from utils ────────
 
 // ── Component ────────────────────────────────────────────────────────────────
 
 const ListenerHome = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
-
   // Chris: real API data
-  const [trending, setTrending] = useState<Track[]>([]);
   const [newReleases, setNewReleases] = useState<Track[]>([]);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [followingReposts, setFollowingReposts] = useState<FollowingRepostItem[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
-
-  // Chris: search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchUsers, setSearchUsers] = useState<SearchUser[]>([]);
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   // Chris: player store
   const globalPlayerState = usePlayerStore();
@@ -107,10 +84,10 @@ const ListenerHome = () => {
         setUsername(profileData.username);
         startPolling();
 
-        const [trendRes, newRes, exploreRes, followingRepostsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/auth/trending/`),
-          fetch(`${API_BASE_URL}/api/auth/new-releases/`),
-          fetch(`${API_BASE_URL}/api/auth/explore/`),
+        const [newRes, exploreRes, feedRes, followingRepostsRes] = await Promise.all([
+          apiFetch('/api/auth/new-releases/'),
+          apiFetch('/api/auth/explore/'),
+          apiFetch('/api/auth/feed/'),
           apiFetch('/api/auth/following-reposts/'),
         ]);
 
@@ -124,9 +101,14 @@ const ListenerHome = () => {
           ];
         };
 
-        if (trendRes.ok) setTrending(fmt(await trendRes.json()));
         if (newRes.ok) setNewReleases(fmt(await newRes.json()));
-        if (exploreRes.ok) setAllTracks(fmt(await exploreRes.json()));
+
+        // Combine tracks + publications
+        const tracks = exploreRes.ok ? fmt(await exploreRes.json()) : [];
+        const pubs = feedRes.ok
+          ? (await feedRes.json()).map((p: any) => ({ ...p, type: 'publication' as const }))
+          : [];
+        setAllTracks([...tracks, ...pubs].sort((a, b) => (b.play_count ?? 0) - (a.play_count ?? 0)));
         if (followingRepostsRes.ok) {
           const raw = await followingRepostsRes.json();
           setFollowingReposts(Array.isArray(raw) ? raw : []);
@@ -139,43 +121,6 @@ const ListenerHome = () => {
     };
     init();
   }, [navigate, API_BASE_URL]);
-
-  // ── Close search dropdown on outside click (Chris) ────────────────────────
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node))
-        setSearchOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  // ── Search logic (Chris) ──────────────────────────────────────────────────
-
-  const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setSearchUsers([]); setSearchResults([]); setSearchOpen(false); return; }
-    setSearching(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/search/?q=${encodeURIComponent(q)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSearchUsers(data.users || []);
-        setSearchResults([
-          ...(data.publications || []).map((p: any) => ({ ...p, type: 'publication' as const })),
-          ...(data.tracks || []).map((t: any) => ({ ...t, type: 'track' as const })),
-        ]);
-        setSearchOpen(true);
-      }
-    } catch { /* silent */ } finally { setSearching(false); }
-  }, [API_BASE_URL]);
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!value.trim()) { setSearchUsers([]); setSearchResults([]); setSearchOpen(false); return; }
-    searchTimerRef.current = setTimeout(() => runSearch(value), 300);
-  };
 
   // ── Playback helpers (Chris) ──────────────────────────────────────────────
 
@@ -201,19 +146,28 @@ const ListenerHome = () => {
     return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
   };
 
-  // ── Logout (Chris: stops player) ──────────────────────────────────────────
-
-  const handleLogout = () => {
-    usePlayerStore.getState().stop();
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('username');
-    navigate('/login');
+  const toggleLike = async (item: Track) => {
+    const endpoint = item.type === 'track'
+      ? `/api/auth/tracks/${item.id}/like/`
+      : `/api/auth/publications/${item.id}/like/`;
+    try {
+      const res = await apiFetch(endpoint, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const update = (list: Track[]) => list.map(t =>
+          t.id === item.id && t.type === item.type
+            ? { ...t, is_liked: data.liked, like_count: data.like_count ?? ((t.like_count ?? 0) + (data.liked ? 1 : -1)) }
+            : t
+        );
+        setAllTracks(update);
+        setNewReleases(update);
+      }
+    } catch { /* silent */ }
   };
 
   // ── Sub-components ────────────────────────────────────────────────────────
 
-  /** Tony's gradient card design + Chris's play/data wiring */
+  /** Track card with cover image, play button, and like button */
   const TrackCard = ({ item, index }: { item: Track; index: number }) => {
     const playing = isPlaying(item);
     return (
@@ -222,7 +176,7 @@ const ListenerHome = () => {
           {item.cover_image ? (
             <img src={item.cover_image} alt="" style={styles.cardImage} />
           ) : (
-            <div style={{ ...styles.cardGradient, background: getGradient(index) }} />
+            <div style={{ ...styles.cardGradient, background: getTrackGradient(item.id) }} />
           )}
           <button
             className="card-play-btn"
@@ -231,14 +185,20 @@ const ListenerHome = () => {
           >
             {playing ? '⏸' : '▶'}
           </button>
-          {item.profile_picture && (
-            <img
-              src={item.profile_picture}
-              alt=""
-              style={styles.cardAvatarBadge}
-              onClick={(e) => { e.stopPropagation(); navigate(`/@${item.username}`); }}
-            />
-          )}
+          <button
+            type="button"
+            className="card-heart-btn"
+            onClick={(e) => { e.stopPropagation(); toggleLike(item); }}
+            style={{ ...styles.cardHeartBtn, color: item.is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.7)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24"
+              fill={item.is_liked ? '#ff4d6d' : 'none'}
+              stroke={item.is_liked ? '#ff4d6d' : 'currentColor'}
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
         </div>
         <div style={styles.cardTextWrap} onClick={() => navigate(`/${item.type}/${item.id}`)}>
           <p style={styles.cardTitle}>{item.title}</p>
@@ -248,7 +208,13 @@ const ListenerHome = () => {
           >
             {item.display_name || item.username}
           </p>
-          <p style={styles.cardPlays}>▶ {formatCount(item.play_count)}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <p style={styles.cardPlays}>▶ {formatCount(item.play_count)}</p>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+              {formatCount(item.like_count)}
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -256,9 +222,11 @@ const ListenerHome = () => {
 
   /** Repost from someone you follow — secondary home feed strip */
   const FollowingRepostRow = ({ item }: { item: FollowingRepostItem }) => {
-    const t = { ...item.track, type: 'track' as const };
+    const t = { ...item.track, type: (item.track.type || 'track') as Track['type'] };
     const playing = isPlaying(t);
     const name = item.reposter_display_name || item.reposter_username;
+    const isUpload = item.activity_type === 'upload';
+    const time = item.timestamp || item.reposted_at || '';
     return (
       <div style={styles.followingRepostWrap}>
         <button
@@ -269,13 +237,13 @@ const ListenerHome = () => {
           {item.reposter_profile_picture ? (
             <img src={item.reposter_profile_picture} alt="" style={styles.followingRepostAvatar} />
           ) : (
-            <div style={styles.followingRepostAvatarPh}>👤</div>
+            <div style={{...styles.followingRepostAvatarPh, background: getUserGradient(item.reposter_username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 12}}>{item.reposter_username ? item.reposter_username[0].toUpperCase() : '?'}</div>
           )}
           <span style={styles.followingRepostHeaderText}>
             <strong style={{ color: '#e9d5ff' }}>{name}</strong>
             <span style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 400 }}>
               {' '}
-              reposted · {repostTimeAgo(item.reposted_at)}
+              {isUpload ? 'uploaded' : 'reposted'} · {repostTimeAgo(time)}
             </span>
           </span>
         </button>
@@ -284,7 +252,7 @@ const ListenerHome = () => {
             {t.cover_image ? (
               <img src={t.cover_image} alt="" style={styles.rowThumbImg} />
             ) : (
-              <div style={styles.rowThumbPh}>🎵</div>
+              <div style={{ ...styles.rowThumbPh, background: getTrackGradient(t.id) }} />
             )}
             <button
               style={{ ...styles.rowPlay, opacity: playing ? 1 : undefined }}
@@ -304,7 +272,7 @@ const ListenerHome = () => {
               />
             )}
           </div>
-          <div style={styles.rowInfo} onClick={() => navigate(`/track/${t.id}`)}>
+          <div style={styles.rowInfo} onClick={() => navigate(`/${t.type}/${t.id}`)}>
             <span style={styles.rowTitle}>{t.title}</span>
             <span
               style={styles.rowArtist}
@@ -336,64 +304,12 @@ const ListenerHome = () => {
     );
   };
 
-  /** Chris's TrackRow for the All Tracks feed */
-  const TrackRow = ({ item }: { item: Track }) => {
-    const playing = isPlaying(item);
-    return (
-      <div style={styles.row} className="track-row">
-        <div style={{ ...styles.rowThumb, position: 'relative' }}>
-          {item.cover_image ? (
-            <img src={item.cover_image} alt="" style={styles.rowThumbImg} />
-          ) : (
-            <div style={styles.rowThumbPh}>🎵</div>
-          )}
-          <button
-            style={{ ...styles.rowPlay, opacity: playing ? 1 : undefined }}
-            onClick={() => playing ? globalPlayerState.togglePlayPause() : playTrack(item)}
-          >
-            {playing ? '⏸' : '▶'}
-          </button>
-          {item.profile_picture && (
-            <img
-              src={item.profile_picture}
-              alt=""
-              style={styles.rowAvatarBadge}
-              onClick={(e) => { e.stopPropagation(); navigate(`/@${item.username}`); }}
-            />
-          )}
-        </div>
-        <div style={styles.rowInfo} onClick={() => navigate(`/${item.type}/${item.id}`)}>
-          <span style={styles.rowTitle}>{item.title}</span>
-          <span
-            style={styles.rowArtist}
-            onClick={(e) => { e.stopPropagation(); navigate(`/@${item.username}`); }}
-          >
-            {item.display_name || item.username}
-          </span>
-        </div>
-        {/* Waveform placeholder */}
-        <div style={styles.waveWrap}>
-          {Array.from({ length: 36 }).map((_, i) => (
-            <div key={i} style={{
-              ...styles.waveBar,
-              height: `${12 + Math.abs(Math.sin(i * 0.8) * 16 + Math.cos(i * 0.3) * 8)}px`,
-              background: playing
-                ? `rgba(167,139,250,${0.35 + (i % 3) * 0.2})`
-                : `rgba(100,150,200,${0.2 + (i % 3) * 0.15})`,
-            }} />
-          ))}
-        </div>
-        <span style={styles.rowCount}>▶ {formatCount(item.play_count)}</span>
-      </div>
-    );
-  };
-
   // ── Render (Tony's layout with sidebar) ───────────────────────────────────
 
   return (
     <div style={styles.pageWrapper}>
       {/* ── Sidebar (Tony) ──────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: globalPlayerState.currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -403,14 +319,17 @@ const ListenerHome = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </div>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+
+          {/* ── CHANGED: Marketplace is now a real link instead of greyed out ── */}
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
+
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -425,157 +344,94 @@ const ListenerHome = () => {
         </nav>
 
         <div style={styles.sidebarBottom}>
-          <Link to="/create" style={styles.uploadBtn}>
+          <Link to={username ? `/@${username}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* ── Main area ───────────────────────────────────────────────────────── */}
-      <div style={styles.mainArea}>
-        {/* ── Top bar (Tony layout + Chris search) ────────────────────────── */}
-        <header style={styles.topBar}>
-          <div ref={searchWrapRef} style={styles.searchWrap}>
-            <input
-              type="text"
-              placeholder="Search tracks or artists..."
-              style={styles.searchInput}
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchQuery.trim()) {
-                  setSearchOpen(false);
-                  navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                }
-              }}
-              onFocus={() => { if (searchResults.length > 0 || searchUsers.length > 0) setSearchOpen(true); }}
-            />
-            {searching && <span style={styles.searchSpinner}>...</span>}
-
-            {/* ── Search dropdown (Chris) ──────────────────────────────────── */}
-            {searchOpen && (searchUsers.length > 0 || searchResults.length > 0) && (
-              <div style={styles.searchDropdown}>
-                {searchUsers.length > 0 && (
-                  <>
-                    <div style={styles.dropLabel}>People</div>
-                    {searchUsers.map((u) => (
-                      <div
-                        key={`u-${u.id}`}
-                        style={styles.dropRow}
-                        onClick={() => { setSearchOpen(false); navigate(`/@${u.username}`); }}
-                      >
-                        {u.profile_picture
-                          ? <img src={u.profile_picture} alt="" style={styles.dropAvatar} />
-                          : <div style={styles.dropAvatarPh}>👤</div>}
-                        <div>
-                          <div style={styles.dropName}>{u.username}</div>
-                          <div style={styles.dropSub}>{u.role === 'both' ? 'Listener & Creator' : u.role}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {searchResults.length > 0 && (
-                  <>
-                    <div style={styles.dropLabel}>Tracks & Posts</div>
-                    {searchResults.map((r) => (
-                      <div key={`r-${r.type}-${r.id}`} style={styles.dropRow}>
-                        <button style={styles.dropPlayBtn} onClick={() => playTrack(r)}>▶</button>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={styles.dropName}>{r.title}</div>
-                          <div
-                            style={styles.dropSub}
-                            onClick={() => { setSearchOpen(false); navigate(`/@${r.username}`); }}
-                          >
-                            @{r.username}
-                          </div>
-                        </div>
-                        <span style={{ ...styles.dropTag, ...(r.type === 'publication' ? styles.dropTagPub : {}) }}>
-                          {r.type === 'publication' ? 'POST' : 'TRACK'}
-                        </span>
-                      </div>
-                    ))}
-                  </>
-                )}
-                <div
-                  style={styles.dropSeeAll}
-                  onClick={() => { setSearchOpen(false); navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`); }}
-                >
-                  See all results
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
-        </header>
-
+      <div className="sidebar-main" style={styles.mainArea}>
         {/* ── Hero banner (Tony) ──────────────────────────────────────────── */}
-        <div style={styles.heroBanner}>
+        <div className="hero-responsive" style={styles.heroBanner}>
           <div style={styles.heroOverlay} />
           <div style={styles.heroContent}>
-            <h1 style={styles.heroTitle}>Listen. Create. Connect.</h1>
-            <p style={styles.heroSubtitle}>Discover your next favorite sound or make your own.</p>
+            <h1 className="hero-title-responsive" style={styles.heroTitle}>Listen. Create. Connect.</h1>
+            <p className="hero-subtitle-responsive" style={styles.heroSubtitle}>Discover your next favorite sound or make your own.</p>
           </div>
         </div>
 
         {/* ── Featured Track (Tony design, real data) ─────────────────────── */}
-        {!contentLoading && trending.length > 0 && (
-          <section style={styles.featuredSection}>
+        {!contentLoading && allTracks.length > 0 && (
+          <section className="content-padding" style={styles.featuredSection}>
             <h2 style={styles.sectionTitle}>Featured Track</h2>
-            <div style={styles.featuredCard}>
-              <div style={{ ...styles.featuredLeft, cursor: 'pointer', position: 'relative' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>
-                {trending[0].cover_image ? (
-                  <img src={trending[0].cover_image} alt="" style={styles.featuredImage} />
+            <div className="featured-responsive" style={styles.featuredCard}>
+              <div className="card-img-wrap featured-left-responsive" style={{ ...styles.featuredLeft, cursor: 'pointer', position: 'relative' }} onClick={() => navigate(`/${allTracks[0].type}/${allTracks[0].id}`)}>
+                {allTracks[0].cover_image ? (
+                  <img src={allTracks[0].cover_image} alt="" style={styles.featuredImage} />
                 ) : (
-                  <div style={{ ...styles.featuredImagePh, background: getGradient(trending[0].id) }} />
+                  <div style={{ ...styles.featuredImagePh, background: getTrackGradient(allTracks[0].id) }} />
                 )}
-                {trending[0].profile_picture && (
+                <button
+                  type="button"
+                  className="card-heart-btn"
+                  onClick={(e) => { e.stopPropagation(); toggleLike(allTracks[0]); }}
+                  style={{ ...styles.cardHeartBtn, color: allTracks[0].is_liked ? '#ff4d6d' : 'rgba(255,255,255,0.7)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24"
+                    fill={allTracks[0].is_liked ? '#ff4d6d' : 'none'}
+                    stroke={allTracks[0].is_liked ? '#ff4d6d' : 'currentColor'}
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                  </svg>
+                </button>
+                {allTracks[0].profile_picture && (
                   <img
-                    src={trending[0].profile_picture}
+                    src={allTracks[0].profile_picture}
                     alt=""
                     style={styles.featuredAvatarBadge}
-                    onClick={(e) => { e.stopPropagation(); navigate(`/@${trending[0].username}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/@${allTracks[0].username}`); }}
                   />
                 )}
               </div>
               <div style={styles.featuredRight}>
                 <p style={styles.featuredLabel}>NOW PLAYING</p>
-                <h3 style={{ ...styles.featuredTitle, cursor: 'pointer' }} onClick={() => navigate(`/${trending[0].type}/${trending[0].id}`)}>{trending[0].title}</h3>
+                <h3 style={{ ...styles.featuredTitle, cursor: 'pointer' }} onClick={() => navigate(`/${allTracks[0].type}/${allTracks[0].id}`)}>{allTracks[0].title}</h3>
                 <p
                   style={styles.featuredArtist}
-                  onClick={() => navigate(`/@${trending[0].username}`)}
+                  onClick={() => navigate(`/@${allTracks[0].username}`)}
                 >
-                  {trending[0].display_name || trending[0].username}
+                  {allTracks[0].display_name || allTracks[0].username}
                 </p>
-                {/* Waveform visualization (Tony) */}
-                <div style={styles.featuredWaveWrap}>
-                  {Array.from({ length: 50 }).map((_, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        width: 3,
-                        borderRadius: 2,
-                        background: isPlaying(trending[0])
-                          ? `rgba(167,139,250,${0.4 + (i % 3) * 0.2})`
-                          : `rgba(167,139,250,${0.2 + (i % 4) * 0.1})`,
-                        height: `${8 + Math.abs(Math.sin(i * 0.5) * 20 + Math.cos(i * 0.3) * 10)}px`,
-                      }}
-                    />
-                  ))}
+                {/* Waveform visualization */}
+                <div style={{ marginTop: 8 }}>
+                  <TrackPageWaveform
+                    audioUrl={allTracks[0].audio_file}
+                    isActive={
+                      globalPlayerState.currentTrack?.id === allTracks[0].id &&
+                      globalPlayerState.currentTrack?.type === allTracks[0].type
+                    }
+                    waveHeight={48}
+                  />
                 </div>
                 <div style={styles.featuredActions}>
                   <button
                     style={styles.featuredPlayBtn}
                     onClick={() =>
-                      isPlaying(trending[0])
+                      isPlaying(allTracks[0])
                         ? globalPlayerState.togglePlayPause()
-                        : playTrack(trending[0])
+                        : playTrack(allTracks[0])
                     }
                   >
-                    {isPlaying(trending[0]) ? '⏸ Pause' : '▶ Play'}
+                    {isPlaying(allTracks[0]) ? '⏸ Pause' : '▶ Play'}
                   </button>
-                  <span style={styles.featuredPlays}>▶ {formatCount(trending[0].play_count)}</span>
+                  <span style={styles.featuredPlays}>▶ {formatCount(allTracks[0].play_count)}</span>
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,255,255,0.4)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                    {formatCount(allTracks[0].like_count)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -583,36 +439,26 @@ const ListenerHome = () => {
         )}
 
         {/* ── Main content ────────────────────────────────────────────────── */}
-        <div style={styles.mainContent}>
+        <div className="content-padding" style={styles.mainContent}>
           {contentLoading ? (
             <div style={{ textAlign: 'center', margin: '40px 0', opacity: 0.6 }}>
               Loading featured tracks…
             </div>
           ) : (
             <>
-              {/* Trending Now grid (Tony's 6-col card grid, Chris data) */}
-              {trending.length > 0 && (
-                <section style={styles.section}>
-                  <div style={styles.sectionHead}>
-                    <h2 style={styles.sectionTitle}>🔥 Trending Now</h2>
-                    <Link to="/explore" style={styles.seeAll}>See all</Link>
-                  </div>
-                  <div style={styles.trackGrid}>
-                    {trending.slice(0, 6).map((item, idx) => (
-                      <TrackCard key={`tr-${item.type}-${item.id}`} item={item} index={idx} />
-                    ))}
-                  </div>
-                </section>
-              )}
-
               {/* New Releases grid */}
               {newReleases.length > 0 && (
                 <section style={styles.section}>
                   <div style={styles.sectionHead}>
-                    <h2 style={styles.sectionTitle}>✨ New Releases</h2>
+                    <h2 style={{ ...styles.sectionTitle, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                      New Releases
+                    </h2>
                     <Link to="/explore" style={styles.seeAll}>See all</Link>
                   </div>
-                  <div style={styles.trackGrid}>
+                  <div className="track-grid-responsive" style={styles.trackGrid}>
                     {newReleases.slice(0, 6).map((item, idx) => (
                       <TrackCard key={`nr-${item.type}-${item.id}`} item={item} index={idx + 3} />
                     ))}
@@ -625,36 +471,23 @@ const ListenerHome = () => {
                 <section style={styles.section}>
                   <div style={styles.sectionHead}>
                     <h2 style={{ ...styles.sectionTitle, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <RepostIcon size={22} />
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
                       From people you follow
                     </h2>
-                    <span style={styles.sectionSubtle}>Recent reposts</span>
+                    <span style={styles.sectionSubtle}>Recent activity</span>
                   </div>
                   <div style={styles.followingRepostList}>
                     {followingReposts.map((fr) => (
-                      <FollowingRepostRow key={`${fr.reposter_username}-${fr.track.id}-${fr.reposted_at}`} item={fr} />
+                      <FollowingRepostRow key={`${fr.activity_type}-${fr.reposter_username}-${fr.track.id}-${fr.timestamp || fr.reposted_at}`} item={fr} />
                     ))}
                   </div>
                 </section>
               )}
-
-              {/* All Tracks feed (Chris's TrackRow) */}
-              <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>All Tracks</h2>
-                {allTracks.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', opacity: 0.5 }}>
-                    <p style={{ fontSize: 36, marginBottom: 12 }}>🎵</p>
-                    <p>No tracks uploaded yet. Be the first!</p>
-                    <Link to="/create" style={styles.uploadBtn}>Upload a Track</Link>
-                  </div>
-                ) : (
-                  <div style={styles.trackList}>
-                    {allTracks.map((item) => (
-                      <TrackRow key={`all-${item.type}-${item.id}`} item={item} />
-                    ))}
-                  </div>
-                )}
-              </section>
             </>
           )}
         </div>
@@ -669,12 +502,14 @@ const ListenerHome = () => {
         button:hover { transform: translateY(-1px); }
         .card-play-btn { opacity: 0; transition: opacity 0.15s; }
         .card-img-wrap:hover .card-play-btn { opacity: 1 !important; }
+        .card-heart-btn:hover { transform: scale(1.15); }
         .track-row:hover { background: rgba(255,255,255,0.04) !important; }
         .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
         ::-webkit-scrollbar { height: 4px; width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.4); border-radius: 2px; }
       `}</style>
+      
     </div>
   );
 };
@@ -699,10 +534,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
-    height: '100vh',
-    overflowY: 'auto',
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -746,6 +583,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center',
@@ -769,155 +614,16 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-  },
-
-  // ── Top bar ───────────────────────────────────────────────────────────────
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 64,
-    padding: '0 32px',
-    background: 'rgba(19,19,31,0.92)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: '1px solid rgba(167,139,250,0.12)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
-  },
-  searchWrap: {
-    position: 'relative',
-    flex: 1,
-    maxWidth: 480,
-  },
-  searchInput: {
-    width: '100%',
-    padding: '10px 20px',
-    borderRadius: 12,
-    border: '1.5px solid rgba(167,139,250,0.3)',
-    background: 'rgba(28,28,46,0.8)',
-    color: 'white',
-    fontSize: 14,
-    fontFamily: "'Poppins', sans-serif",
-    transition: 'all 0.3s ease',
-  },
-  searchSpinner: {
-    position: 'absolute',
-    right: 14,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
-    pointerEvents: 'none',
-  },
-  searchDropdown: {
-    position: 'absolute',
-    top: 'calc(100% + 6px)',
-    left: 0,
-    right: 0,
-    maxHeight: 360,
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
     overflowY: 'auto',
-    background: 'rgba(19,19,31,0.97)',
-    border: '1px solid rgba(167,139,250,0.25)',
-    borderRadius: 12,
-    zIndex: 100,
-    backdropFilter: 'blur(16px)',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-  },
-  dropLabel: {
-    padding: '8px 14px 4px',
-    fontSize: 11,
-    fontWeight: 700,
-    color: 'rgba(255,255,255,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  dropRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '9px 14px',
-    cursor: 'pointer',
-    transition: 'background 0.1s',
-    borderBottom: '1px solid rgba(167,139,250,0.08)',
-  },
-  dropAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: '50%',
-    objectFit: 'cover',
-    flexShrink: 0,
-  },
-  dropAvatarPh: {
-    width: 34,
-    height: 34,
-    borderRadius: '50%',
-    background: 'rgba(28,28,46,0.8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 15,
-    flexShrink: 0,
-  },
-  dropName: { fontSize: 13, fontWeight: 600, color: '#fff' },
-  dropSub: { fontSize: 11, color: 'rgba(255,255,255,0.45)', cursor: 'pointer' },
-  dropPlayBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: '50%',
-    border: 'none',
-    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
-    color: '#fff',
-    fontSize: 11,
-    cursor: 'pointer',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dropTag: {
-    fontSize: 10,
-    fontWeight: 600,
-    padding: '2px 7px',
-    borderRadius: 6,
-    background: 'rgba(167,139,250,0.25)',
-    color: 'rgba(255,255,255,0.7)',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  dropTagPub: {
-    background: 'rgba(236,72,153,0.3)',
-    color: 'rgba(236,72,153,0.9)',
-  },
-  dropSeeAll: {
-    padding: '10px 14px',
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#a78bfa',
-    cursor: 'pointer',
-    borderTop: '1px solid rgba(167,139,250,0.12)',
-  },
-  logoutButton: {
-    padding: '10px 24px',
-    borderRadius: 9999,
-    border: 'none',
-    background: 'linear-gradient(135deg, #ff6b6b, #dd4a4a)',
-    color: 'white',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: "'Poppins', sans-serif",
-    boxShadow: '0 3px 12px rgba(255,100,100,0.25)',
-    transition: 'all 0.2s',
-    marginLeft: 16,
-    flexShrink: 0,
   },
 
   // ── Hero banner (Tony) ────────────────────────────────────────────────────
   heroBanner: {
     position: 'relative',
     height: 200,
+    flexShrink: 0,
     background: 'linear-gradient(135deg, #1c1c2e 0%, #a78bfa 50%, #ec4899 100%)',
     display: 'flex',
     alignItems: 'center',
@@ -1002,15 +708,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#ec4899',
     cursor: 'pointer',
   },
-  featuredWaveWrap: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: 2,
-    height: 36,
-    overflow: 'hidden',
-    marginTop: 8,
-    opacity: 0.7,
-  },
   featuredActions: {
     display: 'flex',
     alignItems: 'center',
@@ -1034,7 +731,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: 'rgba(255,255,255,0.5)',
   },
-
   // ── Main content area ─────────────────────────────────────────────────────
   mainContent: {
     padding: '32px 32px 120px',
@@ -1116,7 +812,6 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Track grid (Tony's 6-column gradient cards) ───────────────────────────
   trackGrid: {
     display: 'grid',
-    /* minmax(0,1fr) so column width ignores huge image intrinsic sizes — keeps every cell equal */
     gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
     gap: 16,
   },
@@ -1173,6 +868,23 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     boxShadow: '0 2px 12px rgba(167,139,250,0.4)',
     transition: 'opacity 0.15s',
+  },
+  cardHeartBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    background: 'rgba(0,0,0,0.4)',
+    backdropFilter: 'blur(8px)',
+    border: 'none',
+    borderRadius: '50%',
+    width: 32,
+    height: 32,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'transform 0.15s',
+    zIndex: 2,
   },
   cardTextWrap: {
     cursor: 'pointer',
@@ -1291,8 +1003,7 @@ const styles: Record<string, React.CSSProperties> = {
   waveBar: {
     width: 3,
     borderRadius: 2,
-    flexShrink: 0,
-    transition: 'background 0.3s',
+    transition: 'height 0.1s',
   },
   rowCount: {
     flexShrink: 0,
@@ -1302,7 +1013,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'right',
   },
 
-  // Avatar badges (profile picture circle on track images)
+  // Avatar badges
   cardAvatarBadge: {
     position: 'absolute',
     bottom: 6,
@@ -1329,13 +1040,13 @@ const styles: Record<string, React.CSSProperties> = {
   } as React.CSSProperties,
   rowAvatarBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 32,
-    height: 32,
+    bottom: 4,
+    right: 4,
+    width: 20,
+    height: 20,
     borderRadius: '50%',
     objectFit: 'cover',
-    border: '2px solid #13131f',
+    border: '1.5px solid #13131f',
     cursor: 'pointer',
     zIndex: 2,
   } as React.CSSProperties,

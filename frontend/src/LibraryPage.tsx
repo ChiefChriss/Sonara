@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getTrackGradient } from './utils/trackGradient';
 
 interface LibraryItem {
     id: number;
@@ -130,7 +131,7 @@ const LibraryPage = () => {
       `}</style>
 
             {/* ── Sidebar ── */}
-            <nav style={styles.sidebar}>
+            <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
                 <div style={styles.sidebarTop}>
                     <Link to="/home">
                         <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -141,7 +142,7 @@ const LibraryPage = () => {
                         <span style={styles.sidebarIcon}><HomeIcon /></span> Home
                     </Link>
                     <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+                        <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
                     </Link>
                     <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                         <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
@@ -163,12 +164,13 @@ const LibraryPage = () => {
                 </div>
                 <div style={styles.sidebarBottom}>
                     <Link to="/upload" style={styles.uploadBtn}>Upload Track</Link>
+                    <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
                 </div>
             </nav>
 
             {/* ── Main Area ── */}
-            <div style={styles.mainArea}>
-                <div style={styles.main}>
+            <div className="sidebar-main" style={styles.mainArea}>
+                <div className="library-main" style={styles.main}>
                     <h1 style={styles.pageTitle}>Your Library</h1>
 
                     {loading ? (
@@ -225,9 +227,7 @@ const LibraryPage = () => {
                                         {item.cover_image ? (
                                             <img src={item.cover_image} alt="" style={styles.coverImg} />
                                         ) : (
-                                            <div style={styles.coverPlaceholder}>
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                                            </div>
+                                            <div style={{ ...styles.coverPlaceholder, background: getTrackGradient(item.id) }} />
                                         )}
                                         <div style={styles.titleInfo}>
                                             <span style={styles.songTitle}>{item.title}</span>
@@ -284,17 +284,18 @@ const styles: Record<string, React.CSSProperties> = {
     pageWrapper: { display: 'flex', minHeight: '100vh', background: '#0f0f1a', fontFamily: "'Poppins', sans-serif", color: '#ffffff' },
 
     // ── Sidebar ──
-    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'sticky' as const, top: 0, height: '100vh', overflowY: 'auto' as const },
+    sidebar: { width: 240, flexShrink: 0, background: '#13131f', borderRight: '1px solid rgba(167,139,250,0.15)', display: 'flex', flexDirection: 'column' as const, position: 'fixed' as const, top: 0, left: 0, bottom: 0, overflow: 'hidden', zIndex: 100 },
     sidebarTop: { padding: '24px 20px 16px', borderBottom: '1px solid rgba(167,139,250,0.1)' },
     sidebarLogo: { height: 36, width: 'auto', filter: 'drop-shadow(0 0 12px rgba(167,139,250,0.3))' },
     sidebarNav: { display: 'flex', flexDirection: 'column' as const, gap: 4, padding: '16px 12px', flex: 1 },
     sidebarLink: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', cursor: 'pointer' },
     sidebarIcon: { fontSize: 18, width: 24, textAlign: 'center' as const },
     sidebarBottom: { padding: '16px 12px 24px', borderTop: '1px solid rgba(167,139,250,0.1)' },
+    tosLink: { display: 'block', textAlign: 'center' as const, marginTop: '10px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.3)', textDecoration: 'none' },
     uploadBtn: { display: 'block', textAlign: 'center' as const, padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
 
     // ── Main area ──
-    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const },
+    mainArea: { flex: 1, minWidth: 0, overflowY: 'auto' as const, marginLeft: 240, height: 'calc(100vh - 64px)' },
     main: { maxWidth: '960px', margin: '0 auto', padding: '32px 24px', position: 'relative' as const, zIndex: 1 },
     pageTitle: { fontSize: '24px', fontWeight: 700, marginBottom: '16px' },
     subtitle: { fontSize: '14px', color: 'rgba(255,255,255,0.5)', marginBottom: '16px' },

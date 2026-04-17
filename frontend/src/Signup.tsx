@@ -3,12 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
+import Footer from './components/Footer';
 
 const Signup = () => {
   const [username, setUsername] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [agreedToTos, setAgreedToTos] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const navigate = useNavigate();
 
@@ -26,6 +28,11 @@ const Signup = () => {
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+
+    if (!agreedToTos) {
+      setError('You must agree to the Terms of Service to sign up');
       return;
     }
 
@@ -136,7 +143,23 @@ const Signup = () => {
             />
           </div>
 
-          <button type="submit" style={styles.signupButton}>
+          <div style={styles.tosWrapper}>
+            <input
+              type="checkbox"
+              id="tos-agree"
+              checked={agreedToTos}
+              onChange={e => setAgreedToTos(e.target.checked)}
+              style={styles.checkbox}
+            />
+            <label htmlFor="tos-agree" style={styles.tosLabel}>
+              I agree to the{' '}
+              <Link to="/terms-of-service" target="_blank" style={styles.tosLink}>
+                Terms of Service
+              </Link>
+            </label>
+          </div>
+
+          <button type="submit" style={{ ...styles.signupButton, opacity: agreedToTos ? 1 : 0.5 }}>
             Sign Up
           </button>
         </form>
@@ -148,6 +171,10 @@ const Signup = () => {
         <p style={styles.loginText}>
           Already have an account? <Link to="/login" style={styles.loginLink}>Login</Link>
         </p>
+      </div>
+
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 1 }}>
+        <Footer />
       </div>
 
       <style>{`
@@ -285,6 +312,31 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#ff6b6b',
     fontSize: '14px',
     textAlign: 'center',
+  },
+  tosWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    maxWidth: '400px',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    flexShrink: 0,
+    accentColor: '#00d4ff',
+    cursor: 'pointer',
+  },
+  tosLabel: {
+    fontSize: '14px',
+    color: 'rgba(255, 255, 255, 0.7)',
+    cursor: 'pointer',
+  },
+  tosLink: {
+    color: '#00d4ff',
+    textDecoration: 'none',
+    fontWeight: 600,
+    transition: 'color 0.3s ease',
   },
   loginText: {
     marginTop: '24px',

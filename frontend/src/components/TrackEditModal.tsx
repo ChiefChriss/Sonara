@@ -10,13 +10,17 @@ interface TrackEditModalProps {
     editId?: number;           // For edit modes
     initialTitle?: string;
     initialCoverUrl?: string | null;
+    initialPrice?: string;
+    initialForSale?: boolean;
     onSuccess: () => void;
 }
 
 const TrackEditModal: React.FC<TrackEditModalProps> = ({
-    isOpen, onClose, mode, initialFile, editId, initialTitle = '', initialCoverUrl = null, onSuccess
+    isOpen, onClose, mode, initialFile, editId, initialTitle = '', initialCoverUrl = null, initialPrice = '0', initialForSale = false, onSuccess
 }) => {
     const [title, setTitle] = useState(initialTitle);
+    const [price, setPrice] = useState(initialPrice);
+    const [forSale, setForSale] = useState(initialForSale);
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(initialCoverUrl);
     const [saving, setSaving] = useState(false);
@@ -28,11 +32,13 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     useEffect(() => {
         if (isOpen) {
             setTitle(initialTitle || (initialFile ? initialFile.name.replace(/\.[^/.]+$/, '') : ''));
+            setPrice(initialPrice || '0');
+            setForSale(initialForSale || false);
             setCoverFile(null);
             setPreviewUrl(initialCoverUrl);
             setError('');
         }
-    }, [isOpen, initialTitle, initialFile, initialCoverUrl]);
+    }, [isOpen, initialTitle, initialFile, initialCoverUrl, initialPrice, initialForSale]);
 
     if (!isOpen) return null;
 
@@ -59,6 +65,9 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
         try {
             const formData = new FormData();
             formData.append('title', title.trim());
+            const priceVal = parseFloat(price) || 0;
+            formData.append('price', priceVal.toFixed(2));
+            formData.append('for_sale', forSale ? 'true' : 'false');
             if (coverFile) {
                 formData.append('cover_image', coverFile);
             }
@@ -103,7 +112,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
 
     return (
         <div style={styles.overlay}>
-            <div style={styles.modal}>
+            <div className="modal-responsive" style={styles.modal}>
                 <h2 style={styles.header}>{titleText}</h2>
 
                 {error && <div style={styles.error}>{error}</div>}
@@ -141,6 +150,50 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
                             style={styles.input}
                             placeholder="Track Title"
                         />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                            <label style={{ ...styles.label, marginTop: 0 }}>List on Marketplace</label>
+                            <button
+                                type="button"
+                                onClick={() => setForSale(v => !v)}
+                                style={{
+                                    width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+                                    background: forSale ? 'linear-gradient(135deg, #a78bfa, #ec4899)' : 'rgba(255,255,255,0.15)',
+                                    position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                                }}
+                            >
+                                <span style={{
+                                    position: 'absolute', top: 3, left: forSale ? 21 : 3,
+                                    width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                                    transition: 'left 0.2s',
+                                }} />
+                            </button>
+                        </div>
+                        {forSale && (
+                            <>
+                                <label style={{ ...styles.label, marginTop: 10 }}>Price (USD) — set 0 for free</label>
+                                <div style={{ position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>$</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={price}
+                                        onChange={e => {
+                                            const v = e.target.value;
+                                            if (/^\d*\.?\d{0,2}$/.test(v)) setPrice(v);
+                                        }}
+                                        onKeyDown={e => {
+                                            const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
+                                            if (allowed.includes(e.key)) return;
+                                            if (/^\d$/.test(e.key)) return;
+                                            if (e.key === '.' && !price.includes('.')) return;
+                                            e.preventDefault();
+                                        }}
+                                        style={{ ...styles.input, paddingLeft: 24 }}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 

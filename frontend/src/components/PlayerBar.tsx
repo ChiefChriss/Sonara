@@ -1,6 +1,8 @@
 import { useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePlayerStore, PlayerTrack } from '../stores/playerStore';
+import { getTrackGradient } from '../utils/trackGradient';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const formatTime = (s: number) => {
     if (!s || !isFinite(s)) return '0:00';
@@ -9,9 +11,12 @@ const formatTime = (s: number) => {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
+const MOBILE_NAV_HEIGHT = 64;
+
 const PlayerBar = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const isMobile = useIsMobile();
     const { currentTrack, isPlaying, currentTime, duration, volume, togglePlayPause, seek, setVolume, stop } = usePlayerStore();
     const progressRef = useRef<HTMLDivElement>(null);
 
@@ -26,27 +31,44 @@ const PlayerBar = () => {
     );
 
     const authRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/'];
-    if (authRoutes.includes(location.pathname) || !currentTrack) return null;
+    if (authRoutes.includes(location.pathname) || location.pathname.startsWith('/workstation') || !currentTrack) return null;
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     const gradientInnerPct = progress > 0 ? Math.min(50000, 10000 / Math.max(progress, 0.02)) : 0;
 
+    const barStyle: React.CSSProperties = isMobile
+        ? { ...styles.bar, position: 'fixed', bottom: MOBILE_NAV_HEIGHT, left: 0, right: 0, height: 60, padding: '0 10px', gap: '10px', zIndex: 9999 }
+        : styles.bar;
+
     return (
         <>
             <style>{`
-        body { padding-bottom: 72px; }
         .player-bar-progress:hover { height: 6px !important; }
         .player-bar-progress:hover .progress-thumb { opacity: 1 !important; }
         .player-vol-slider::-webkit-slider-thumb {
           -webkit-appearance: none; width: 12px; height: 12px;
           border-radius: 50%; background: #fff; cursor: pointer; margin-top: -4px;
+          box-shadow: 0 0 6px rgba(0,212,255,0.4);
         }
         .player-vol-slider::-webkit-slider-runnable-track {
           height: 4px; border-radius: 2px;
           background: linear-gradient(to right, rgba(0,212,255,0.8) 0%, rgba(0,212,255,0.8) var(--vol-pct), rgba(255,255,255,0.2) var(--vol-pct), rgba(255,255,255,0.2) 100%);
         }
+        .player-vol-slider::-moz-range-thumb {
+          width: 12px; height: 12px; border: none;
+          border-radius: 50%; background: #fff; cursor: pointer;
+          box-shadow: 0 0 6px rgba(0,212,255,0.4);
+        }
+        .player-vol-slider::-moz-range-track {
+          height: 4px; border-radius: 2px; border: none;
+          background: rgba(255,255,255,0.2);
+        }
+        .player-vol-slider::-moz-range-progress {
+          height: 4px; border-radius: 2px;
+          background: rgba(0,212,255,0.8);
+        }
       `}</style>
-            <div style={styles.bar}>
+            <div style={barStyle}>
                 <div
                     ref={progressRef}
                     className="player-bar-progress"
@@ -79,23 +101,18 @@ const PlayerBar = () => {
                     />
                 </div>
 
+                {/* Track info */}
                 <div style={styles.left}>
                     <div
                         style={{ ...styles.leftInner, cursor: 'pointer' }}
                         onClick={() => navigate(`/${currentTrack.type}/${currentTrack.id}`)}
                     >
                         {currentTrack.coverImage ? (
-                            <img src={currentTrack.coverImage} alt="" style={styles.cover} />
+                            <img src={currentTrack.coverImage} alt="" style={isMobile ? styles.coverMobile : styles.cover} />
                         ) : (
-                            <div style={styles.coverPlaceholder}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2">
-                                    <path d="M9 18V5l12-2v13" />
-                                    <circle cx="6" cy="18" r="3" />
-                                    <circle cx="18" cy="16" r="3" />
-                                </svg>
-                            </div>
+                            <div style={{ ...(isMobile ? styles.coverPlaceholderMobile : styles.coverPlaceholder), background: getTrackGradient(currentTrack.id) }} />
                         )}
-                        <div style={styles.trackInfo}>
+                        <div style={isMobile ? styles.trackInfoMobile : styles.trackInfo}>
                             <span style={styles.trackTitle}>{currentTrack.title}</span>
                             <span
                                 style={styles.trackArtist}
@@ -110,57 +127,60 @@ const PlayerBar = () => {
                     </div>
                 </div>
 
+                {/* Play/Pause + time */}
                 <div style={styles.center}>
-                    <button type="button" onClick={togglePlayPause} style={styles.playPauseBtn}>
+                    <button type="button" onClick={togglePlayPause} style={isMobile ? styles.playPauseBtnMobile : styles.playPauseBtn}>
                         {isPlaying ? (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" stroke="none">
+                            <svg width={isMobile ? 20 : 22} height={isMobile ? 20 : 22} viewBox="0 0 24 24" fill="#fff" stroke="none">
                                 <rect x="6" y="4" width="4" height="16" rx="1" />
                                 <rect x="14" y="4" width="4" height="16" rx="1" />
                             </svg>
                         ) : (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" stroke="none">
+                            <svg width={isMobile ? 20 : 22} height={isMobile ? 20 : 22} viewBox="0 0 24 24" fill="#fff" stroke="none">
                                 <polygon points="5,3 19,12 5,21" />
                             </svg>
                         )}
                     </button>
-                    <span style={styles.time}>
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                    </span>
+                    {!isMobile && (
+                        <span style={styles.time}>
+                            {formatTime(currentTime)} / {formatTime(duration)}
+                        </span>
+                    )}
                 </div>
 
-                <div style={styles.right}>
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.6)"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ flexShrink: 0 }}
-                    >
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                        {volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
-                        {volume > 0.5 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
-                    </svg>
-                    <input
-                        type="range"
-                        className="player-vol-slider"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={volume}
-                        onChange={(e) => setVolume(parseFloat(e.target.value))}
-                        style={{ ...styles.volSlider, '--vol-pct': `${volume * 100}%` } as React.CSSProperties}
-                    />
-                    <button type="button" onClick={stop} style={styles.closeBtn} title="Close player">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+                {/* Desktop: volume + close | Mobile: just close */}
+                {isMobile ? (
+                    <button type="button" onClick={stop} style={styles.closeBtnMobile} title="Close player">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
-                </div>
+                ) : (
+                    <div style={styles.right}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                            {volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+                            {volume > 0.5 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
+                        </svg>
+                        <input
+                            type="range"
+                            className="player-vol-slider"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={volume}
+                            onChange={(e) => setVolume(parseFloat(e.target.value))}
+                            style={{ ...styles.volSlider, '--vol-pct': `${volume * 100}%` } as React.CSSProperties}
+                        />
+                        <button type="button" onClick={stop} style={styles.closeBtn} title="Close player">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
+                    </div>
+                )}
             </div>
         </>
     );
@@ -168,10 +188,8 @@ const PlayerBar = () => {
 
 const styles: Record<string, React.CSSProperties> = {
     bar: {
-        position: 'fixed',
+        position: 'sticky',
         bottom: 0,
-        left: 0,
-        right: 0,
         height: '72px',
         background: 'rgba(10, 10, 26, 0.96)',
         backdropFilter: 'blur(20px)',
@@ -239,28 +257,22 @@ const styles: Record<string, React.CSSProperties> = {
         gap: '12px',
         minWidth: 0,
     },
-    cover: {
-        width: '48px',
-        height: '48px',
-        borderRadius: '6px',
-        objectFit: 'cover' as const,
-        flexShrink: 0,
-    },
-    coverPlaceholder: {
-        width: '48px',
-        height: '48px',
-        borderRadius: '6px',
-        flexShrink: 0,
-        background: 'rgba(30,45,80,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    cover: { width: 48, height: 48, borderRadius: 6, objectFit: 'cover' as const, flexShrink: 0 },
+    coverMobile: { width: 40, height: 40, borderRadius: 6, objectFit: 'cover' as const, flexShrink: 0 },
+    coverPlaceholder: { width: 48, height: 48, borderRadius: 6, flexShrink: 0 },
+    coverPlaceholderMobile: { width: 40, height: 40, borderRadius: 6, flexShrink: 0 },
     trackInfo: {
         display: 'flex',
         flexDirection: 'column' as const,
         overflow: 'hidden',
         gap: '2px',
+    },
+    trackInfoMobile: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        overflow: 'hidden',
+        gap: '1px',
+        maxWidth: 120,
     },
     trackTitle: {
         fontSize: '13px',
@@ -286,50 +298,38 @@ const styles: Record<string, React.CSSProperties> = {
         flex: '0 0 auto',
     },
     playPauseBtn: {
-        width: '40px',
-        height: '40px',
-        borderRadius: '50%',
-        border: 'none',
+        width: 40, height: 40, borderRadius: '50%', border: 'none',
         background: 'linear-gradient(135deg, #00d4ff, #0096c7)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        boxShadow: '0 2px 12px rgba(0,212,255,0.3)',
-        transition: 'transform 0.1s',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,212,255,0.3)', transition: 'transform 0.1s',
+    },
+    playPauseBtnMobile: {
+        width: 38, height: 38, borderRadius: '50%', border: 'none',
+        background: 'linear-gradient(135deg, #00d4ff, #0096c7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,212,255,0.3)',
+        WebkitTapHighlightColor: 'transparent',
     },
     time: {
-        fontSize: '12px',
-        color: 'rgba(255,255,255,0.45)',
-        whiteSpace: 'nowrap' as const,
-        minWidth: '80px',
-        fontVariantNumeric: 'tabular-nums',
+        fontSize: '12px', color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' as const,
+        minWidth: '80px', fontVariantNumeric: 'tabular-nums',
     },
     right: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: '8px',
-        flex: '1 1 30%',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flex: '1 1 30%',
     },
     volSlider: {
         WebkitAppearance: 'none' as unknown as React.CSSProperties,
         appearance: 'none' as unknown as React.CSSProperties,
-        width: '80px',
-        height: '4px',
-        background: 'transparent',
-        cursor: 'pointer',
-        outline: 'none',
+        width: '80px', height: '4px', background: 'transparent', cursor: 'pointer', outline: 'none',
     },
     closeBtn: {
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '6px',
-        marginLeft: '4px',
+        background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', marginLeft: '4px',
+    },
+    closeBtnMobile: {
+        background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 8, flexShrink: 0, WebkitTapHighlightColor: 'transparent',
     },
 };
 

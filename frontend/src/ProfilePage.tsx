@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import NotFound from './NotFound';
 import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
@@ -9,6 +9,7 @@ import TrackEditModal from './components/TrackEditModal';
 import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
+import { getUserGradient } from './utils/userGradient';
 
 interface UserProfile {
   id: number;
@@ -41,6 +42,8 @@ interface Track {
   audio_file: string;
   uploaded_at: string;
   cover_image?: string;
+  price?: string;
+  for_sale?: boolean;
 }
 
 interface RepostListEntry {
@@ -64,7 +67,11 @@ const ProfilePage = () => {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Posts');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>(() => {
+    const tab = searchParams.get('tab');
+    return (TABS as readonly string[]).includes(tab ?? '') ? (tab as (typeof TABS)[number]) : 'Posts';
+  });
   const [editing, setEditing] = useState(false);
   const [editBio, setEditBio] = useState('');
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -84,6 +91,8 @@ const ProfilePage = () => {
   const [editTargetId, setEditTargetId] = useState<number | undefined>(undefined);
   const [editInitialTitle, setEditInitialTitle] = useState('');
   const [editInitialCover, setEditInitialCover] = useState<string | null>(null);
+  const [editInitialPrice, setEditInitialPrice] = useState('0');
+  const [editInitialForSale, setEditInitialForSale] = useState(false);
   const [deletingTrackId, setDeletingTrackId] = useState<number | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
@@ -486,7 +495,7 @@ const ProfilePage = () => {
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -496,14 +505,15 @@ const ProfilePage = () => {
             <span style={styles.sidebarIcon}><HomeIcon /></span> Home
           </Link>
           <Link to="/explore" className="sidebar-link" style={styles.sidebarLink}>
-            <span style={styles.sidebarIcon}><TrendingIcon /></span> Trending
+            <span style={styles.sidebarIcon}><TrendingIcon /></span> Tracks
           </Link>
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
+
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -512,20 +522,21 @@ const ProfilePage = () => {
               </span>
             )}
           </Link>
-          <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+          <Link to={loggedInUsername ? `/@${loggedInUsername}` : '/profile'} className="sidebar-link" style={{ ...styles.sidebarLink, ...(isOwnProfile ? styles.sidebarLinkActive : {}) }}>
             <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
-          </div>
+          </Link>
         </nav>
 
         <div style={styles.sidebarBottom}>
-          <Link to="/create" style={styles.uploadBtn}>
+          <Link to={loggedInUsername ? `/@${loggedInUsername}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* ── Main content area ────────────────────────────────────────── */}
-      <div style={styles.mainArea}>
+      <div className="sidebar-main" style={styles.mainArea}>
 
       {/* Hidden file inputs (always in DOM) */}
       <input
@@ -581,7 +592,7 @@ const ProfilePage = () => {
                   ...styles.editCover,
                   ...(getHeaderImageUrl()
                     ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-                    : {}),
+                    : { background: getUserGradient(user?.username || '') }),
                 }}
               >
                 {getHeaderImageUrl() && <div style={styles.coverGradient} />}
@@ -610,12 +621,6 @@ const ProfilePage = () => {
                     </button>
                   )}
                 </div>
-                {!getHeaderImageUrl() && (
-                  <div style={styles.coverPlaceholder}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                    <span>Add cover photo</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -633,9 +638,9 @@ const ProfilePage = () => {
                 onClick={() => pfpInputRef.current?.click()}
               >
                 {!getPfpImageUrl() && (
-                  <span style={styles.avatarIcon}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                  </span>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                    {user?.username ? user.username[0].toUpperCase() : '?'}
+                  </div>
                 )}
                 {/* Camera badge */}
                 <div style={styles.avatarCameraBadge}>
@@ -746,26 +751,21 @@ const ProfilePage = () => {
       {/* Cover */}
       <div style={styles.coverWrap}>
         <div
+          className="profile-cover-responsive"
           style={{
             ...styles.cover,
             ...(getHeaderImageUrl()
               ? { backgroundImage: `url(${getHeaderImageUrl()})` }
-              : {}),
+              : { background: getUserGradient(user?.username || '') }),
           }}
         >
           {getHeaderImageUrl() && <div style={styles.coverGradient} />}
-          {!getHeaderImageUrl() && (
-            <div style={styles.coverPlaceholder}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-              <span>No cover photo</span>
-            </div>
-          )}
         </div>
       </div>
 
       <div style={styles.main}>
         {/* Profile info block */}
-        <div style={styles.profileBlock}>
+        <div className="profile-info-section" style={styles.profileBlock}>
           <div
             style={{
               ...styles.avatar,
@@ -775,9 +775,9 @@ const ProfilePage = () => {
             }}
           >
             {!getPfpImageUrl() && (
-              <span style={styles.avatarIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-              </span>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: getUserGradient(user?.username || ''), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 44 }}>
+                {user?.username ? user.username[0].toUpperCase() : '?'}
+              </div>
             )}
           </div>
 
@@ -794,7 +794,7 @@ const ProfilePage = () => {
           </div>
 
           {/* Follower / Following counts */}
-          <div style={styles.followStats}>
+          <div className="profile-stats-row" style={styles.followStats}>
             <button type="button" onClick={() => openFollowList('followers')} style={styles.followStatBtn}>
               <strong>{followerCount}</strong> Followers
             </button>
@@ -818,11 +818,11 @@ const ProfilePage = () => {
           <div style={styles.rolePill}>{roleLabel}</div>
 
           {user?.bio?.trim() ? (
-            <p style={styles.bio}>{user.bio}</p>
+            <p className="profile-bio" style={styles.bio}>{user.bio}</p>
           ) : null}
 
           {isOwnProfile && (
-            <div style={styles.actions}>
+            <div className="profile-actions" style={styles.actions}>
               <button
                 type="button"
                 onClick={() => {
@@ -841,7 +841,7 @@ const ProfilePage = () => {
         </div>
 
         {/* Tabs */}
-        <div style={styles.tabsWrap}>
+        <div className="profile-tab-bar" style={styles.tabsWrap}>
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -858,7 +858,7 @@ const ProfilePage = () => {
         </div>
 
         {/* Tab content */}
-        <div style={styles.tabContent}>
+        <div className="profile-tab-content" style={styles.tabContent}>
           {activeTab === 'Tracks' ? (
             <div>
               {isOwnProfile && (
@@ -899,7 +899,7 @@ const ProfilePage = () => {
               ) : (
                 <div style={styles.trackList}>
                   {tracks.map((track) => (
-                    <div key={track.id} style={styles.trackCard}>
+                    <div key={track.id} className="profile-track-card" style={styles.trackCard}>
                       <button
                         type="button"
                         onClick={() => togglePlay(track)}
@@ -922,6 +922,8 @@ const ProfilePage = () => {
                               setEditTargetId(track.id);
                               setEditInitialTitle(track.title);
                               setEditInitialCover(track.cover_image || null);
+                              setEditInitialPrice(track.price || '0');
+                              setEditInitialForSale(track.for_sale || false);
                               setModalMode('edit_track');
                             }}
                             style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
@@ -1018,7 +1020,7 @@ const ProfilePage = () => {
       {cropTarget && cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
-          aspect={cropTarget === 'pfp' ? 1 : 16 / 9}
+          aspect={cropTarget === 'pfp' ? 1 : 5.15}
           cropShape={cropTarget === 'pfp' ? 'round' : 'rect'}
           onCropComplete={(blob) => {
             const ext = blob.type === 'image/png' ? '.png' : '.jpg';
@@ -1069,8 +1071,8 @@ const ProfilePage = () => {
                   >
                     {u.profile_picture
                       ? <img src={u.profile_picture} alt="" style={styles.followUserAvatar} />
-                      : <div style={styles.followUserAvatarPh}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      : <div style={{...styles.followUserAvatarPh, background: getUserGradient(u.username), color: '#fff', fontWeight: 700, fontFamily: "'Poppins', sans-serif", fontSize: 16}}>
+                          {u.username ? u.username[0].toUpperCase() : '?'}
                         </div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1098,6 +1100,8 @@ const ProfilePage = () => {
           editId={editTargetId}
           initialTitle={editInitialTitle}
           initialCoverUrl={editInitialCover}
+          initialPrice={editInitialPrice}
+          initialForSale={editInitialForSale}
           onSuccess={() => {
             fetchTracks();
           }}
@@ -1125,10 +1129,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: '1px solid rgba(167,139,250,0.15)',
     display: 'flex',
     flexDirection: 'column' as const,
-    position: 'sticky' as const,
+    position: 'fixed' as const,
     top: 0,
-    height: '100vh',
-    overflowY: 'auto' as const,
+    left: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 100,
   },
   sidebarTop: {
     padding: '24px 20px 16px',
@@ -1172,6 +1178,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center' as const,
@@ -1194,6 +1208,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     overflowY: 'auto' as const,
+    marginLeft: 240,
+    height: 'calc(100vh - 64px)',
   },
   loadingWrap: {
     display: 'flex',
@@ -1244,7 +1260,9 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 4px 20px rgba(167, 139, 250, 0.3)',
   },
   coverWrap: {
-    width: '100%',
+    maxWidth: '1330px',
+    margin: '0 auto',
+    padding: '24px 24px 0',
     position: 'relative',
     zIndex: 1,
   },
@@ -1257,7 +1275,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottom: '1px solid rgba(167, 139, 250, 0.2)',
+    borderRadius: '16px',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1366,7 +1384,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editCover: {
     width: '100%',
-    height: '200px',
+    aspectRatio: '5.15',
     background: 'linear-gradient(135deg, rgba(19, 19, 31, 0.9) 0%, rgba(30, 25, 50, 0.7) 50%, rgba(40, 20, 60, 0.6) 100%)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
@@ -1489,14 +1507,14 @@ const styles: Record<string, React.CSSProperties> = {
   main: {
     maxWidth: '1280px',
     margin: '0 auto',
-    marginTop: '-60px',
+    marginTop: '-9px',
     position: 'relative',
     zIndex: 1,
     paddingLeft: '24px',
     paddingRight: '24px',
     borderLeft: '1px solid rgba(167, 139, 250, 0.15)',
     borderRight: '1px solid rgba(167, 139, 250, 0.15)',
-    minHeight: 'calc(100vh - 53px - 230px + 60px)',
+    minHeight: 'calc(100vh - 53px + 284px)',
   },
   coverPlaceholder: {
     display: 'flex',
@@ -1523,7 +1541,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     border: '4px solid #0f0f1a',
-    marginTop: '-60px',
+    marginTop: '-70px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
