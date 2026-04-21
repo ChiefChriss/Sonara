@@ -330,6 +330,26 @@ const ProfilePage = () => {
     }
   };
 
+  const buildMusicQueue = () => {
+    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
+    const artistHandle = user?.username || urlUsername || '';
+    const trackItems = tracks.map((t) => ({
+      id: t.id, type: 'track' as const,
+      title: t.title, artist: artistName,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }));
+    const pubItems = publications.map((p) => ({
+      id: p.id, type: 'publication' as const,
+      title: p.title, artist: p.display_name || p.username || artistName,
+      audioUrl: p.audio_file,
+      coverImage: p.cover_image || p.profile_picture || null,
+      artistHandle: p.username || artistHandle,
+    }));
+    return [...trackItems, ...pubItems];
+  };
+
   const togglePlay = (track: Track) => {
     if (currentTrack?.id === track.id && currentTrack?.type === 'track') {
       togglePlayPause();
@@ -337,13 +357,7 @@ const ProfilePage = () => {
     }
     const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
     const artistHandle = user?.username || urlUsername || '';
-    const queue = tracks.map((t) => ({
-      id: t.id, type: 'track' as const,
-      title: t.title, artist: artistName,
-      audioUrl: t.audio_file,
-      coverImage: t.cover_image || user?.profile_picture || null,
-      artistHandle,
-    }));
+    const queue = buildMusicQueue();
     play({
       id: track.id, type: 'track',
       title: track.title, artist: artistName,
@@ -376,13 +390,7 @@ const ProfilePage = () => {
     }
     const artistName = publication.display_name || publication.username;
     const artistHandle = publication.username;
-    const queue = publications.map((p) => ({
-      id: p.id, type: 'publication' as const,
-      title: p.title, artist: artistName,
-      audioUrl: p.audio_file,
-      coverImage: p.cover_image || p.profile_picture || null,
-      artistHandle,
-    }));
+    const queue = buildMusicQueue();
     play({
       id: publication.id, type: 'publication',
       title: publication.title, artist: artistName,
@@ -392,27 +400,15 @@ const ProfilePage = () => {
     }, { queue });
   };
 
-  const buildDiscographyQueue = () => {
-    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
-    const artistHandle = user?.username || urlUsername || '';
-    return tracks.map((t) => ({
-      id: t.id, type: 'track' as const,
-      title: t.title, artist: artistName,
-      audioUrl: t.audio_file,
-      coverImage: t.cover_image || user?.profile_picture || null,
-      artistHandle,
-    }));
-  };
-
   const playAll = () => {
-    const queue = buildDiscographyQueue();
+    const queue = buildMusicQueue();
     if (!queue.length) return;
     if (isShuffleEnabled) toggleShuffle();
     play(queue[0], { queue });
   };
 
   const shuffleAll = () => {
-    const queue = buildDiscographyQueue();
+    const queue = buildMusicQueue();
     if (!queue.length) return;
     if (!isShuffleEnabled) toggleShuffle();
     const start = queue[Math.floor(Math.random() * queue.length)];
