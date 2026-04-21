@@ -1,8 +1,13 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import useDawStore from '../state/dawStore';
 import { initAudio, play, pause, stop as engineStop, rewind as engineRewind, updateBpm } from '../engine/TransportSync';
+import { decodeAudioFile } from '../utils/AudioUtils';
 import * as Icons from './Icons';
 import { PlayGlyph, PauseGlyph } from '../../components/MediaIcons';
+
+const MIC_MIME = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+  ? 'audio/webm;codecs=opus'
+  : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
 
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const MIN_BPM = 20;
@@ -26,6 +31,12 @@ const Transport: React.FC = () => {
   const toggleRecord = useDawStore((s) => s.toggleRecord);
   const setBpm = useDawStore((s) => s.setBpm);
   const setMusicalKey = useDawStore((s) => s.setMusicalKey);
+  const addAudioClip = useDawStore((s) => s.addAudioClip);
+  const addTrack = useDawStore((s) => s.addTrack);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordStartTimeRef = useRef<number>(0);
 
   const handleTogglePlay = async () => {
     await initAudio(); // Ensure audio context is started
@@ -50,6 +61,69 @@ const Transport: React.FC = () => {
   const handleBpmChange = (newBpm: number) => {
     setBpm(newBpm);
     updateBpm(newBpm);
+  };
+
+  const startMicRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: MIC_MIME });
+      mediaRecorderRef.current = recorder;
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: MIC_MIME });
+        if (blob.size < 1000) return;
+
+        const file = new File([blob], `Recording ${new Date().toLocaleTimeString()}`, { type: MIC_MIME });
+        const curBpm = useDawStore.getState().bpm;
+        const data = await decodeAudioFile(file, curBpm);
+
+        const liveTracks = useDawStore.getState().tracks;
+        const audioTracks = liveTracks.filter(t => t.type === 'audio');
+        let targetTrackId: number;
+        if (audioTracks.length > 0) {
+          targetTrackId = audioTracks[audioTracks.length - 1].id;
+        } else {
+          addTrack('audio');
+          const newTracks = useDawStore.getState().tracks;
+          targetTrackId = newTracks[newTracks.length - 1].id;
+        }
+
+        const recordStartBeat = (recordStartTimeRef.current / 60) * curBpm;
+        addAudioClip(targetTrackId, Math.max(0, recordStartBeat), data.name, data.durationBeats, data.url, data.peaks);
+      };
+
+      recordStartTimeRef.current = useDawStore.getState().currentTime;
+      recorder.start(250);
+    } catch (err) {
+      console.error('Mic access denied:', err);
+      alert('Microphone access is required to record audio. Please allow mic access and try again.');
+    }
+  }, [addTrack, addAudioClip]);
+
+  const stopMicRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+  }, []);
+
+  const handleRecordToggle = async () => {
+    await initAudio();
+    if (isRecording) {
+      stopMicRecording();
+      toggleRecord();
+    } else {
+      if (!isPlaying) {
+        play();
+        togglePlay();
+      }
+      await startMicRecording();
+      toggleRecord();
+    }
   };
 
   const undo = useDawStore((s) => s.undo);
@@ -108,12 +182,13 @@ const Transport: React.FC = () => {
           ⏭
         </button>
         <button
-          onClick={toggleRecord}
+          onClick={handleRecordToggle}
           style={{
             ...styles.transportButton,
             ...styles.recordButton,
             ...(isRecording ? styles.recordButtonActive : {}),
           }}
+          title={isRecording ? 'Stop recording' : 'Record mic to audio track'}
         >
           ●
         </button>
