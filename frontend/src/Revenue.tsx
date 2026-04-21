@@ -115,13 +115,13 @@ const Revenue = () => {
           </div>
         </div>
 
-        <div style={styles.mainContent}>
+        <div className="revenue-main-content" style={styles.mainContent}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '60px 0', opacity: 0.5 }}>Loading revenue data...</div>
           ) : (
             <>
               {/* Summary cards */}
-              <div style={styles.statsRow}>
+              <div className="revenue-stats" style={styles.statsRow}>
                 <div style={{ ...styles.statCard, gridColumn: 'span 1' }}>
                   <span style={{ ...styles.statNum, color: '#34d399' }}>${totalRevenue}</span>
                   <span style={styles.statLabel}>Total Revenue</span>
@@ -149,7 +149,7 @@ const Revenue = () => {
                   </p>
                 </div>
               ) : (
-                <div style={styles.twoCol}>
+                <div className="revenue-two-col" style={styles.twoCol}>
                   {/* Sales feed */}
                   <div style={styles.section}>
                     <h2 style={styles.sectionTitle}>Recent Sales</h2>
@@ -220,6 +220,11 @@ const Revenue = () => {
         .sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.4); border-radius: 2px; }
+        @media (max-width: 768px) {
+          .revenue-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .revenue-two-col { grid-template-columns: 1fr !important; }
+          .revenue-main-content { padding: 20px 16px 120px !important; }
+        }
       `}</style>
     </div>
   );
