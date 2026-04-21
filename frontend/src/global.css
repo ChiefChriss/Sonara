@@ -112,7 +112,8 @@ html, body {
   }
   .featured-left-responsive {
     width: 100% !important;
-    height: 180px !important;
+    height: auto !important;
+    aspect-ratio: 1 !important;
     border-radius: 10px !important;
   }
 
@@ -174,7 +175,8 @@ html, body {
   }
   .content-cover-wrap {
     width: 100% !important;
-    height: 200px !important;
+    height: auto !important;
+    aspect-ratio: 1 !important;
     border-radius: 10px !important;
   }
   .content-title-row {
@@ -208,7 +210,7 @@ html, body {
     padding-top: 14px !important;
   }
   .content-comments-outer {
-    padding: 16px 14px 160px !important;
+    padding: 16px 14px 220px !important;
     box-sizing: border-box !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
@@ -318,7 +320,7 @@ html, body {
 
   /* ══ Explore page ══════════════════════════════════════════════════════ */
   .explore-main {
-    padding: 20px 16px 160px !important;
+    padding: 20px 16px 220px !important;
     max-width: 100% !important;
   }
   .explore-grid {
@@ -332,7 +334,7 @@ html, body {
     max-width: 100% !important;
   }
   .notif-main {
-    padding: 16px 14px 160px !important;
+    padding: 16px 14px 220px !important;
   }
   .notif-tabs {
     padding: 0 14px !important;
@@ -354,13 +356,13 @@ html, body {
     padding: 16px 14px !important;
   }
   .search-results {
-    padding: 0 14px 160px !important;
+    padding: 0 14px 220px !important;
     max-width: 100% !important;
   }
 
   /* ══ Library page ══════════════════════════════════════════════════════ */
   .library-main {
-    padding: 20px 14px 160px !important;
+    padding: 20px 14px 220px !important;
     max-width: 100% !important;
   }
 
@@ -386,7 +388,7 @@ html, body {
 
   /* ══ Marketplace page ══════════════════════════════════════════════════ */
   .marketplace-main {
-    padding: 20px 14px 160px !important;
+    padding: 20px 14px 220px !important;
     max-width: 100% !important;
   }
   .marketplace-grid {

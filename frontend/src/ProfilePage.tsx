@@ -93,7 +93,7 @@ type PostItem =
   | { kind: 'publication'; timestamp: string; publication: Publication }
   | { kind: 'repost'; timestamp: string; repost: RepostListEntry };
 
-const TABS = ['Posts', 'Tracks', 'Playlists', 'Likes'] as const;
+type ProfileView = 'music' | 'social' | 'manage';
 
 const ProfilePage = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -101,9 +101,9 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>(() => {
-    const tab = searchParams.get('tab');
-    return (TABS as readonly string[]).includes(tab ?? '') ? (tab as (typeof TABS)[number]) : 'Posts';
+  const [view, setView] = useState<ProfileView>(() => {
+    const v = searchParams.get('view');
+    return (v === 'social' || v === 'manage') ? v : 'music';
   });
   const [editing, setEditing] = useState(false);
   const [editBio, setEditBio] = useState('');
@@ -142,7 +142,7 @@ const ProfilePage = () => {
   const [likedItems, setLikedItems] = useState<LikedItem[]>([]);
   const [likesLoading, setLikesLoading] = useState(false);
 
-  const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
+  const { currentTrack, isPlaying, play, togglePlayPause, stop, toggleShuffle, isShuffleEnabled } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
   const trackUploadInputId = 'profile-track-upload-input';
@@ -335,12 +335,22 @@ const ProfilePage = () => {
       togglePlayPause();
       return;
     }
+    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
+    const artistHandle = user?.username || urlUsername || '';
+    const queue = tracks.map((t) => ({
+      id: t.id, type: 'track' as const,
+      title: t.title, artist: artistName,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }));
     play({
       id: track.id, type: 'track',
-      title: track.title, artist: user?.display_name || user?.username || urlUsername || 'Unknown',
-      audioUrl: track.audio_file, coverImage: user?.profile_picture || null,
-      artistHandle: user?.username || urlUsername || '',
-    });
+      title: track.title, artist: artistName,
+      audioUrl: track.audio_file,
+      coverImage: track.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }, { queue });
   };
 
   const playRepostedTrack = (t: RepostListEntry['track']) => {
@@ -364,15 +374,49 @@ const ProfilePage = () => {
       togglePlayPause();
       return;
     }
+    const artistName = publication.display_name || publication.username;
+    const artistHandle = publication.username;
+    const queue = publications.map((p) => ({
+      id: p.id, type: 'publication' as const,
+      title: p.title, artist: artistName,
+      audioUrl: p.audio_file,
+      coverImage: p.cover_image || p.profile_picture || null,
+      artistHandle,
+    }));
     play({
-      id: publication.id,
-      type: 'publication',
-      title: publication.title,
-      artist: publication.display_name || publication.username,
+      id: publication.id, type: 'publication',
+      title: publication.title, artist: artistName,
       audioUrl: publication.audio_file,
       coverImage: publication.cover_image || publication.profile_picture || null,
-      artistHandle: publication.username,
-    });
+      artistHandle,
+    }, { queue });
+  };
+
+  const buildDiscographyQueue = () => {
+    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
+    const artistHandle = user?.username || urlUsername || '';
+    return tracks.map((t) => ({
+      id: t.id, type: 'track' as const,
+      title: t.title, artist: artistName,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }));
+  };
+
+  const playAll = () => {
+    const queue = buildDiscographyQueue();
+    if (!queue.length) return;
+    if (isShuffleEnabled) toggleShuffle();
+    play(queue[0], { queue });
+  };
+
+  const shuffleAll = () => {
+    const queue = buildDiscographyQueue();
+    if (!queue.length) return;
+    if (!isShuffleEnabled) toggleShuffle();
+    const start = queue[Math.floor(Math.random() * queue.length)];
+    play(start, { queue });
   };
 
   const saveProfile = async () => {
@@ -527,15 +571,15 @@ const ProfilePage = () => {
   }, [fetchTracks, isOwnProfile]);
 
   useEffect(() => {
-    if (activeTab === 'Posts') {
-      fetchReposts();
-      fetchPublications();
-    }
-  }, [activeTab, fetchReposts, fetchPublications]);
+    if (user) fetchPublications();
+  }, [user?.username, fetchPublications]);
 
   useEffect(() => {
-    if (activeTab === 'Likes') fetchLikes();
-  }, [activeTab, fetchLikes]);
+    if (view === 'social') {
+      fetchReposts();
+      fetchLikes();
+    }
+  }, [view, fetchReposts, fetchLikes]);
 
   const postItems = useMemo<PostItem[]>(
     () =>
@@ -958,344 +1002,271 @@ const ProfilePage = () => {
             <p className="profile-bio" style={styles.bio}>{user.bio}</p>
           ) : null}
 
-          {isOwnProfile && (
-            <div className="profile-actions" style={styles.actions}>
-              <button
-                type="button"
-                onClick={() => {
-                  stop();
-                  localStorage.removeItem('accessToken');
-                  localStorage.removeItem('refreshToken');
-                  localStorage.removeItem('username');
-                  navigate('/login');
-                }}
-                style={styles.logoutBtn}
-              >
-                Log out
+          {tracks.length > 0 && (
+            <div style={styles.discographyActions}>
+              <button type="button" onClick={playAll} style={styles.playAllBtn}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+                Play
+              </button>
+              <button type="button" onClick={shuffleAll} style={{ ...styles.shuffleAllBtn, ...(isShuffleEnabled ? styles.shuffleAllBtnActive : {}) }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" />
+                  <polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" />
+                </svg>
+                Shuffle
               </button>
             </div>
           )}
         </div>
 
-        {/* Tabs */}
+        {/* View toggle */}
         <div className="profile-tab-bar" style={styles.tabsWrap}>
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                ...styles.tab,
-                ...(activeTab === tab ? styles.tabActive : {}),
-              }}
-            >
-              {tab}
-            </button>
-          ))}
+          <button type="button" onClick={() => setView('music')} style={{ ...styles.tab, ...(view === 'music' ? styles.tabActive : {}) }}>Music</button>
+          <button type="button" onClick={() => setView('social')} style={{ ...styles.tab, ...(view === 'social' ? styles.tabActive : {}) }}>Social</button>
+          {isOwnProfile && <button type="button" onClick={() => setView('manage')} style={{ ...styles.tab, ...(view === 'manage' ? styles.tabActive : {}) }}>Manage</button>}
         </div>
 
-        {/* Tab content */}
+        {/* Content */}
         <div className="profile-tab-content" style={styles.tabContent}>
-          {activeTab === 'Posts' ? (
+          {view === 'music' ? (
+            /* ── Music view: scrollable discography ── */
             <div>
-              {tracksLoading || repostsLoading || publicationsLoading ? (
-                <p style={styles.comingSoon}>Loading posts...</p>
-              ) : postItems.length === 0 ? (
-                <p style={styles.comingSoon}>
-                  {isOwnProfile ? 'Share tracks or repost something you love - your posts will show up here.' : 'No posts yet.'}
-                </p>
-              ) : (
-                <div style={styles.trackList}>
-                  {postItems.map((item) => {
-                    if (item.kind === 'repost') {
-                      const entry = item.repost;
-                      return (
-                        <div key={`repost-${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
-                          <div style={styles.repostCardMeta}>
-                            <span style={styles.repostBadge}>
-                              <RepostIcon size={14} active />
-                              <span style={{ marginLeft: 6 }}>Reposted</span>
-                            </span>
-                            <span style={styles.repostDate}>
-                              {new Date(entry.reposted_at).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </span>
-                          </div>
-                          <div style={styles.trackCard}>
-                            <button
-                              type="button"
-                              onClick={() => playRepostedTrack(entry.track)}
-                              style={styles.playBtn}
-                              aria-label={
-                                currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
-                                  ? 'Pause'
-                                  : 'Play'
-                              }
-                            >
-                              {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying ? (
-                                <PauseGlyph size={16} fill="#fff" />
-                              ) : (
-                                <PlayGlyph size={16} fill="#fff" />
-                              )}
-                            </button>
-                            <div style={styles.trackInfo}>
-                              <span style={styles.trackTitle}>{entry.track.title}</span>
+              {/* Music section — tracks + publications combined */}
+              {(tracksLoading || publicationsLoading || tracks.length > 0 || publications.length > 0) && (
+                <div style={styles.musicSection}>
+                  <h3 style={styles.musicSectionTitle}>Music</h3>
+                  {tracksLoading || publicationsLoading ? (
+                    <p style={styles.comingSoon}>Loading...</p>
+                  ) : (
+                    <div style={styles.musicGrid}>
+                      {tracks.map((track) => {
+                        const playing = currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying;
+                        return (
+                          <div key={`track-${track.id}`} style={styles.musicCard} onClick={() => navigate(`/track/${track.id}`)}>
+                            <div style={styles.musicCardCover}>
+                              {track.cover_image
+                                ? <img src={track.cover_image} alt="" style={styles.musicCardImg} />
+                                : <div style={{ ...styles.musicCardImg, background: getUserGradient(track.id) }} />}
                               <button
                                 type="button"
-                                style={styles.repostOriginalArtist}
-                                onClick={() => navigate(`/@${entry.track.username}`)}
+                                onClick={(e) => { e.stopPropagation(); togglePlay(track); }}
+                                style={styles.musicCardPlayBtn}
+                                aria-label={playing ? 'Pause' : 'Play'}
                               >
-                                {entry.track.display_name || entry.track.username}
+                                {playing ? <PauseGlyph size={14} fill="#fff" /> : <PlayGlyph size={14} fill="#fff" />}
                               </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/track/${entry.track.id}`)}
-                              style={styles.repostOpenBtn}
-                            >
-                              Open
-                            </button>
+                            <span style={styles.musicCardTitle}>{track.title}</span>
+                            <span style={styles.musicCardSub}>Track</span>
                           </div>
-                        </div>
-                      );
-                    }
-
-                    if (item.kind === 'publication') {
-                      const publication = item.publication;
-                      return (
-                        <div key={`publication-${publication.id}`} style={styles.repostCard}>
-                          <div style={styles.repostCardMeta}>
-                            <span style={styles.repostBadge}>Post</span>
-                            <span style={styles.repostDate}>{new Date(publication.published_at).toLocaleDateString()}</span>
-                          </div>
-                          <div style={styles.trackCard}>
-                            <button
-                              type="button"
-                              onClick={() => playPublication(publication)}
-                              style={styles.playBtn}
-                              aria-label={
-                                currentTrack?.id === publication.id && currentTrack?.type === 'publication' && isPlaying
-                                  ? 'Pause'
-                                  : 'Play'
-                              }
-                            >
-                              {currentTrack?.id === publication.id && currentTrack?.type === 'publication' && isPlaying ? (
-                                <PauseGlyph size={16} fill="#fff" />
-                              ) : (
-                                <PlayGlyph size={16} fill="#fff" />
-                              )}
-                            </button>
-                            <div style={styles.trackInfo}>
-                              <span style={styles.trackTitle}>{publication.title}</span>
-                              <span style={styles.trackDate}>Published song</span>
+                        );
+                      })}
+                      {publications.map((pub) => {
+                        const playing = currentTrack?.id === pub.id && currentTrack?.type === 'publication' && isPlaying;
+                        return (
+                          <div key={`pub-${pub.id}`} style={styles.musicCard} onClick={() => navigate(`/publication/${pub.id}`)}>
+                            <div style={styles.musicCardCover}>
+                              {pub.cover_image
+                                ? <img src={pub.cover_image} alt="" style={styles.musicCardImg} />
+                                : <div style={{ ...styles.musicCardImg, background: getUserGradient(pub.id) }} />}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); playPublication(pub); }}
+                                style={styles.musicCardPlayBtn}
+                                aria-label={playing ? 'Pause' : 'Play'}
+                              >
+                                {playing ? <PauseGlyph size={14} fill="#fff" /> : <PlayGlyph size={14} fill="#fff" />}
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/publication/${publication.id}`)}
-                              style={styles.repostOpenBtn}
-                            >
-                              Open
-                            </button>
+                            <span style={styles.musicCardTitle}>{pub.title}</span>
+                            <span style={styles.musicCardSub}>Made in Sonara</span>
                           </div>
-                        </div>
-                      );
-                    }
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
-                    const track = item.track;
-                    return (
-                      <div key={`track-${track.id}`} style={styles.repostCard}>
-                        <div style={styles.repostCardMeta}>
-                          <span style={styles.repostBadge}>Track</span>
-                          <span style={styles.repostDate}>{new Date(track.uploaded_at).toLocaleDateString()}</span>
-                        </div>
-                        <div style={styles.trackCard}>
-                          <button
-                            type="button"
-                            onClick={() => togglePlay(track)}
-                            style={styles.playBtn}
-                            aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
-                          >
-                            {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? (
-                              <PauseGlyph size={16} fill="#fff" />
-                            ) : (
-                              <PlayGlyph size={16} fill="#fff" />
-                            )}
+              {/* Marketplace section */}
+              {(() => {
+                const forSale = tracks.filter(t => t.for_sale);
+                if (!forSale.length) return null;
+                return (
+                  <div style={styles.musicSection}>
+                    <h3 style={styles.musicSectionTitle}>Marketplace</h3>
+                    <div style={styles.trackList}>
+                      {forSale.map((track) => (
+                        <div key={track.id} style={styles.trackCard}>
+                          <button type="button" onClick={() => togglePlay(track)} style={styles.playBtn}
+                            aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
+                            {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying
+                              ? <PauseGlyph size={16} fill="#fff" />
+                              : <PlayGlyph size={16} fill="#fff" />}
                           </button>
                           <div style={styles.trackInfo}>
                             <span style={styles.trackTitle}>{track.title}</span>
-                            <span style={styles.trackDate}>Uploaded track</span>
+                            <span style={styles.trackDate}>${parseFloat(track.price || '0').toFixed(2)}</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/track/${track.id}`)}
-                            style={styles.repostOpenBtn}
-                          >
-                            Open
+                          <button type="button" onClick={() => navigate(`/track/${track.id}`)} style={styles.repostOpenBtn}>Open</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {!tracksLoading && !publicationsLoading && tracks.length === 0 && publications.length === 0 && (
+                <p style={styles.comingSoon}>No music yet.</p>
+              )}
+
+            </div>
+
+          ) : view === 'social' ? (
+            /* ── Social view: reposts + likes ── */
+            <div>
+              {repostsLoading || likesLoading ? (
+                <p style={styles.comingSoon}>Loading...</p>
+              ) : reposts.length === 0 && likedItems.length === 0 ? (
+                <p style={styles.comingSoon}>No social activity yet.</p>
+              ) : (
+                <div style={styles.trackList}>
+                  {/* ── Reposts section ── */}
+                  <div style={styles.socialSectionHeader}>
+                    <span style={styles.socialSectionTitle}>Reposts</span>
+                    <span style={styles.socialSectionCount}>{reposts.length}</span>
+                  </div>
+                  {reposts.length === 0 ? (
+                    <p style={styles.socialEmpty}>No reposts yet.</p>
+                  ) : reposts.map((entry) => (
+                    <div key={`repost-${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                      <div style={styles.repostCardMeta}>
+                        <span style={styles.repostBadge}>
+                          <RepostIcon size={14} active />
+                          <span style={{ marginLeft: 6 }}>Reposted</span>
+                        </span>
+                        <span style={styles.repostDate}>
+                          {new Date(entry.reposted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <div style={styles.trackCard}>
+                        <button type="button" onClick={() => playRepostedTrack(entry.track)} style={styles.playBtn}
+                          aria-label={currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
+                          {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                            ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
+                        </button>
+                        <div style={styles.trackInfo}>
+                          <span style={styles.trackTitle}>{entry.track.title}</span>
+                          <button type="button" style={styles.repostOriginalArtist} onClick={() => navigate(`/@${entry.track.username}`)}>
+                            {entry.track.display_name || entry.track.username}
                           </button>
                         </div>
+                        <button type="button" onClick={() => navigate(`/track/${entry.track.id}`)} style={styles.repostOpenBtn}>Open</button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
+
+                  {/* ── Likes section ── */}
+                  <div style={{ ...styles.socialSectionHeader, marginTop: 24 }}>
+                    <span style={styles.socialSectionTitle}>Likes</span>
+                    <span style={styles.socialSectionCount}>{likedItems.length}</span>
+                  </div>
+                  {likedItems.length === 0 ? (
+                    <p style={styles.socialEmpty}>No likes yet.</p>
+                  ) : likedItems.map((item) => (
+                    <div key={`like-${item.type}-${item.id}`} style={styles.repostCard}>
+                      <div style={styles.repostCardMeta}>
+                        <span style={styles.repostBadge}>♥ Liked</span>
+                        <span style={styles.repostDate}>{new Date(item.date).toLocaleDateString()}</span>
+                      </div>
+                      <div style={styles.trackCard}>
+                        <button type="button" onClick={() => {
+                          if (currentTrack?.id === item.id && currentTrack?.type === item.type) { togglePlayPause(); return; }
+                          const likesQueue = likedItems.map((li) => ({
+                            id: li.id, type: li.type, title: li.title,
+                            artist: li.display_name || li.username, audioUrl: li.audio_file,
+                            coverImage: li.cover_image || null, artistHandle: li.username,
+                          }));
+                          play({ id: item.id, type: item.type, title: item.title,
+                            artist: item.display_name || item.username, audioUrl: item.audio_file,
+                            coverImage: item.cover_image || null, artistHandle: item.username,
+                          }, { queue: likesQueue });
+                        }} style={styles.playBtn}
+                          aria-label={currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying ? 'Pause' : 'Play'}>
+                          {currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying
+                            ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
+                        </button>
+                        <div style={styles.trackInfo}>
+                          <span style={styles.trackTitle}>{item.title}</span>
+                          <button type="button" style={styles.repostOriginalArtist} onClick={() => navigate(`/@${item.username}`)}>
+                            {item.display_name || item.username}
+                          </button>
+                        </div>
+                        <button type="button" onClick={() => navigate(`/${item.type}/${item.id}`)} style={styles.repostOpenBtn}>Open</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          ) : activeTab === 'Tracks' ? (
-            <div>
-              {isOwnProfile && (
-                <div style={styles.trackUploadSection}>
-                  <h3 style={styles.trackSectionTitle}>Upload a track</h3>
-                  <div style={styles.trackUploadForm}>
-                    <input
-                      id={trackUploadInputId}
-                      type="file"
-                      accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          setTrackFile(f);
-                          setModalMode('upload_track');
-                        }
-                        e.target.value = '';
-                      }}
-                      style={styles.hiddenFileInput}
-                    />
-                    <label
-                      htmlFor={trackUploadInputId}
-                      className="profile-upload-card"
-                      style={styles.uploadCard}
-                    >
-                      <span style={styles.uploadIcon}>♫</span>
-                      <span style={styles.uploadText}>{'Choose audio file'}</span>
-                    </label>
-                  </div>
-                </div>
-              )}
 
+          ) : view === 'manage' && isOwnProfile ? (
+            /* ── Manage view: owner track management ── */
+            <div>
+              <div style={styles.trackUploadSection}>
+                <h3 style={styles.trackSectionTitle}>Upload a track</h3>
+                <div style={styles.trackUploadForm}>
+                  <input
+                    id={trackUploadInputId}
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setTrackFile(f); setModalMode('upload_track'); }
+                      e.target.value = '';
+                    }}
+                    style={styles.hiddenFileInput}
+                  />
+                  <label htmlFor={trackUploadInputId} className="profile-upload-card" style={styles.uploadCard}>
+                    <span style={styles.uploadIcon}>♫</span>
+                    <span style={styles.uploadText}>Choose audio file</span>
+                  </label>
+                </div>
+              </div>
               {tracksLoading ? (
                 <p style={styles.comingSoon}>Loading tracks...</p>
               ) : tracks.length === 0 ? (
-                <p style={styles.comingSoon}>{isOwnProfile ? 'No tracks uploaded yet' : 'No tracks yet'}</p>
+                <p style={styles.comingSoon}>No tracks uploaded yet.</p>
               ) : (
                 <div style={styles.trackList}>
                   {tracks.map((track) => (
                     <div key={track.id} className="profile-track-card" style={styles.trackCard}>
-                      <button
-                        type="button"
-                        onClick={() => togglePlay(track)}
-                        style={styles.playBtn}
-                        aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
-                      >
-                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? (
-                          <PauseGlyph size={16} fill="#fff" />
-                        ) : (
-                          <PlayGlyph size={16} fill="#fff" />
-                        )}
+                      <button type="button" onClick={() => togglePlay(track)} style={styles.playBtn}
+                        aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
+                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying
+                          ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                       </button>
                       <div style={styles.trackInfo}>
                         <span style={styles.trackTitle}>{track.title}</span>
-                        <span style={styles.trackDate}>
-                          {new Date(track.uploaded_at).toLocaleDateString()}
-                        </span>
+                        <span style={styles.trackDate}>{new Date(track.uploaded_at).toLocaleDateString()}</span>
                       </div>
-                      {isOwnProfile && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditTargetId(track.id);
-                              setEditInitialTitle(track.title);
-                              setEditInitialCover(track.cover_image || null);
-                              setEditInitialPrice(track.price || '0');
-                              setEditInitialForSale(track.for_sale || false);
-                              setModalMode('edit_track');
-                            }}
-                            style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
-                            title="Edit metadata"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteTrack(track.id)}
-                            style={styles.trackDeleteBtn}
-                            disabled={deletingTrackId === track.id}
-                            title="Delete track"
-                          >
-                            {deletingTrackId === track.id ? '...' : '✕'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : activeTab === 'Likes' ? (
-            <div>
-              {!isOwnProfile ? (
-                <p style={styles.comingSoon}>Likes are only visible on your own profile.</p>
-              ) : likesLoading ? (
-                <p style={styles.comingSoon}>Loading likes...</p>
-              ) : likedItems.length === 0 ? (
-                <p style={styles.comingSoon}>Tracks and songs you like will show up here.</p>
-              ) : (
-                <div style={styles.trackList}>
-                  {likedItems.map((item) => (
-                    <div key={`${item.type}-${item.id}`} style={styles.repostCard}>
-                      <div style={styles.repostCardMeta}>
-                        <span style={styles.repostBadge}>Liked</span>
-                        <span style={styles.repostDate}>{new Date(item.date).toLocaleDateString()}</span>
-                      </div>
-                      <div style={styles.trackCard}>
-                        <button
-                          type="button"
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button type="button"
                           onClick={() => {
-                            if (currentTrack?.id === item.id && currentTrack?.type === item.type) {
-                              togglePlayPause();
-                              return;
-                            }
-                            play({
-                              id: item.id,
-                              type: item.type,
-                              title: item.title,
-                              artist: item.display_name || item.username,
-                              audioUrl: item.audio_file,
-                              coverImage: item.cover_image || null,
-                              artistHandle: item.username,
-                            });
+                            setEditTargetId(track.id);
+                            setEditInitialTitle(track.title);
+                            setEditInitialCover(track.cover_image || null);
+                            setEditInitialPrice(track.price || '0');
+                            setEditInitialForSale(track.for_sale || false);
+                            setModalMode('edit_track');
                           }}
-                          style={styles.playBtn}
-                          aria-label={
-                            currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying
-                              ? 'Pause'
-                              : 'Play'
-                          }
-                        >
-                          {currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying ? (
-                            <PauseGlyph size={16} fill="#fff" />
-                          ) : (
-                            <PlayGlyph size={16} fill="#fff" />
-                          )}
-                        </button>
-                        <div style={styles.trackInfo}>
-                          <span style={styles.trackTitle}>{item.title}</span>
-                          <button
-                            type="button"
-                            style={styles.repostOriginalArtist}
-                            onClick={() => navigate(`/@${item.username}`)}
-                          >
-                            {item.display_name || item.username}
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/${item.type}/${item.id}`)}
-                          style={styles.repostOpenBtn}
-                        >
-                          Open
+                          style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
+                          title="Edit metadata">✎</button>
+                        <button type="button" onClick={() => deleteTrack(track.id)} style={styles.trackDeleteBtn}
+                          disabled={deletingTrackId === track.id} title="Delete track">
+                          {deletingTrackId === track.id ? '...' : '✕'}
                         </button>
                       </div>
                     </div>
@@ -1303,9 +1274,7 @@ const ProfilePage = () => {
                 </div>
               )}
             </div>
-          ) : (
-            <p style={styles.comingSoon}>{activeTab} - Coming soon</p>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -2093,6 +2062,98 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     margin: 0,
   },
+  socialSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginBottom: '12px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+  },
+  socialSectionTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.9)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.8px',
+  },
+  socialSectionCount: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'rgba(255,255,255,0.35)',
+    background: 'rgba(255,255,255,0.07)',
+    borderRadius: '10px',
+    padding: '2px 8px',
+  },
+  socialEmpty: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.3)',
+    margin: '0 0 8px 0',
+  },
+  musicSection: {
+    marginBottom: '36px',
+  },
+  musicSectionTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    margin: '0 0 14px',
+  },
+  musicGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+    gap: '16px',
+  },
+  musicCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    cursor: 'pointer',
+  },
+  musicCardCover: {
+    position: 'relative' as const,
+    width: '100%',
+    aspectRatio: '1',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    marginBottom: '8px',
+    background: '#1c1c2e',
+  },
+  musicCardImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
+  },
+  musicCardPlayBtn: {
+    position: 'absolute' as const,
+    bottom: '8px',
+    right: '8px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+  },
+  musicCardTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#fff',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  musicCardSub: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: '2px',
+  },
   trackUploadSection: {
     marginBottom: '28px',
     padding: '20px',
@@ -2283,6 +2344,47 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     fontFamily: "'Poppins', sans-serif",
     transition: 'color 0.2s',
+  },
+  discographyActions: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
+    marginTop: '16px',
+    marginBottom: '14px',
+    flexWrap: 'wrap' as const,
+  },
+  playAllBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '9px 22px',
+    borderRadius: '9999px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+    boxShadow: '0 3px 12px rgba(167,139,250,0.3)',
+  },
+  shuffleAllBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '9px 22px',
+    borderRadius: '9999px',
+    border: '2px solid rgba(167,139,250,0.35)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+  },
+  shuffleAllBtnActive: {
+    borderColor: '#a78bfa',
+    color: '#a78bfa',
   },
   followBtn: {
     padding: '8px 28px',

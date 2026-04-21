@@ -1,6 +1,49 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { getApiBaseUrl } from '../utils/apiBase';
 
+// Reads embedded cover art from ID3v2 tags (MP3) without any library.
+async function extractCoverFromFile(file: File): Promise<File | null> {
+    try {
+        const buf = await file.slice(0, 512 * 1024).arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        // Must start with "ID3"
+        if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+        const id3Size =
+            ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) |
+            ((bytes[8] & 0x7f) << 7)  |  (bytes[9] & 0x7f);
+        const version = bytes[3]; // ID3 major version
+        let offset = 10;
+        while (offset < id3Size + 10) {
+            const frameId = String.fromCharCode(bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]);
+            if (frameId === '\0\0\0\0') break;
+            const frameSize = version >= 4
+                ? ((bytes[offset+4] & 0x7f) << 21) | ((bytes[offset+5] & 0x7f) << 14) |
+                  ((bytes[offset+6] & 0x7f) << 7)  |  (bytes[offset+7] & 0x7f)
+                : (bytes[offset+4] << 24) | (bytes[offset+5] << 16) |
+                  (bytes[offset+6] << 8)  |  bytes[offset+7];
+            if (frameId === 'APIC') {
+                let i = offset + 10;
+                i++; // skip encoding byte
+                while (bytes[i] !== 0) i++; // skip mime type string
+                i++; // skip null terminator
+                i++; // skip picture type byte
+                while (bytes[i] !== 0) i++; // skip description
+                i++; // skip null terminator
+                const imgData = bytes.slice(i, offset + 10 + frameSize);
+                // Detect mime from data
+                const mime = imgData[0] === 0x89 ? 'image/png' : 'image/jpeg';
+                const ext = mime === 'image/png' ? 'png' : 'jpg';
+                const blob = new Blob([imgData], { type: mime });
+                return new File([blob], `cover.${ext}`, { type: mime });
+            }
+            offset += 10 + frameSize;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 type ModalMode = 'upload_track' | 'edit_track' | 'edit_pub';
 
 interface TrackEditModalProps {
@@ -38,6 +81,15 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
             setCoverFile(null);
             setPreviewUrl(initialCoverUrl);
             setError('');
+
+            if (initialFile && !initialCoverUrl) {
+                extractCoverFromFile(initialFile).then((extracted) => {
+                    if (extracted) {
+                        setCoverFile(extracted);
+                        setPreviewUrl(URL.createObjectURL(extracted));
+                    }
+                });
+            }
         }
     }, [isOpen, initialTitle, initialFile, initialCoverUrl, initialPrice, initialForSale]);
 

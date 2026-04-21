@@ -23,7 +23,7 @@ const MobileNav = () => {
 
   const tabs = [
     { key: 'home', label: 'Home', path: '/home', icon: homeSvg },
-    { key: 'explore', label: 'Tracks', path: '/explore', icon: trendingSvg },
+    { key: 'marketplace', label: 'Market', path: '/marketplace', icon: marketSvg },
     { key: 'create', label: 'Create', path: '/create', icon: createSvg },
     { key: 'notifications', label: 'Alerts', path: '/notifications', icon: bellSvg, badge: unreadCount },
     { key: 'profile', label: 'Profile', path: username ? `/@${username}` : '/profile', icon: profileSvg },
@@ -77,6 +77,8 @@ const homeSvg = (active: boolean) => `<svg width="22" height="22" viewBox="0 0 2
 const trendingSvg = (active: boolean) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${active ? '#a78bfa' : 'rgba(255,255,255,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 
 const createSvg = (_active: boolean) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#cg)" stroke-width="2.5" stroke-linecap="round"><defs><linearGradient id="cg" x1="0" y1="0" x2="24" y2="24"><stop offset="0%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#ec4899"/></linearGradient></defs><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+
+const marketSvg = (active: boolean) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${active ? '#a78bfa' : 'rgba(255,255,255,0.5)'}" stroke-width="${active ? '2.5' : '2'}" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
 
 const bellSvg = (active: boolean) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${active ? '#a78bfa' : 'none'}" stroke="${active ? '#a78bfa' : 'rgba(255,255,255,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
 

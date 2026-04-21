@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useDawStore from '../state/dawStore';
 import { initAudio, play, pause, stop as engineStop, rewind as engineRewind, updateBpm, updateEffects, updateTrackParams } from '../engine/TransportSync';
-import { createProject, saveProject } from '../api/ProjectApi';
+import { createProject, saveProject, publishSong } from '../api/ProjectApi';
+import { renderToMp3Blob } from '../engine/ExportEngine';
 import { getPreset, getPresetsByCategory, CATEGORIES } from '../models/Presets';
 import { TrackEffects, DEFAULT_EFFECTS } from '../models/Types';
 import { rebuildTrackSynth, previewNoteOn, previewNoteOffSingle, rebuildPreviewSynth } from '../engine/TransportSync';
@@ -242,6 +243,155 @@ const ClipItem = React.memo(({ clip, trackColor, trackType, trackId, pxPerBeat, 
   );
 });
 
+/* ── Mobile Publish Modal ─────────────────────────── */
+
+const MobilePublishModal: React.FC<{ projectName: string; onClose: () => void }> = ({ projectName, onClose }) => {
+  const [title, setTitle] = useState(projectName);
+  const [description, setDescription] = useState('');
+  const [forSale, setForSale] = useState(false);
+  const [price, setPrice] = useState('0');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'rendering' | 'uploading' | 'done' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCover = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    setStatus('rendering');
+    setErrorMsg('');
+    try {
+      const state = useDawStore.getState();
+      const data = state.getProjectData();
+      let projId = state.serverProjectId;
+      if (projId) {
+        await saveProject(projId, state.projectName, data);
+      } else {
+        const proj = await createProject(state.projectName, data);
+        projId = proj.id;
+        state.setServerProjectId(proj.id);
+        window.history.replaceState(null, '', `/workstation/${proj.id}`);
+      }
+      const audioBlob = await renderToMp3Blob();
+      setStatus('uploading');
+      const priceVal = forSale ? Math.max(0, parseFloat(price) || 0) : 0;
+      await publishSong(audioBlob, title.trim(), description, projId || undefined, coverFile || undefined, priceVal, forSale);
+      setStatus('done');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Publish failed. Make sure you are logged in.');
+      setStatus('error');
+    }
+  };
+
+  const busy = status === 'rendering' || status === 'uploading';
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', zIndex: 20000, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ width: '100%', background: '#1a1a2e', borderRadius: '16px 16px 0 0', padding: '20px 16px 32px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: "'Poppins', sans-serif" }}>Publish Song</span>
+          <button onClick={onClose} disabled={busy} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+        </div>
+
+        {status === 'done' ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 6, fontFamily: "'Poppins', sans-serif" }}>Published!</p>
+            <p style={{ fontSize: 13, color: '#888', marginBottom: 20, fontFamily: "'Poppins', sans-serif" }}>
+              Your song is now live on your profile{forSale ? ' and listed in the Marketplace' : ''}.
+            </p>
+            <button onClick={onClose} style={mpStyles.primaryBtn}>Done</button>
+          </div>
+        ) : (
+          <>
+            {/* Cover + title row */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div
+                style={{ width: 80, height: 80, borderRadius: 8, border: '1.5px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, overflow: 'hidden' }}
+                onClick={() => !busy && coverInputRef.current?.click()}
+              >
+                {coverPreview
+                  ? <img src={coverPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+                  : <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 1.4, fontFamily: "'Poppins', sans-serif", padding: '0 6px' }}>Cover</span>}
+              </div>
+              <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCover} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div>
+                  <label style={mpStyles.label}>Title</label>
+                  <input style={mpStyles.input} value={title} onChange={e => setTitle(e.target.value)} placeholder="Song title" disabled={busy} />
+                </div>
+                <div>
+                  <label style={mpStyles.label}>Description</label>
+                  <input style={mpStyles.input} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional…" disabled={busy} />
+                </div>
+              </div>
+            </div>
+
+            {/* Marketplace toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px' }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 2, fontFamily: "'Poppins', sans-serif" }}>List on Marketplace</p>
+                <p style={{ fontSize: 11, color: '#666', fontFamily: "'Poppins', sans-serif" }}>Allow other users to buy this</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !busy && setForSale(v => !v)}
+                style={{ width: 42, height: 24, borderRadius: 12, border: 'none', cursor: busy ? 'default' : 'pointer', background: forSale ? 'linear-gradient(135deg, #a78bfa, #ec4899)' : 'rgba(255,255,255,0.15)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
+              >
+                <span style={{ position: 'absolute', top: 4, left: forSale ? 22 : 4, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </button>
+            </div>
+
+            {forSale && (
+              <div>
+                <label style={mpStyles.label}>Price (USD) — enter 0 for free</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#666', fontSize: 14 }}>$</span>
+                  <input
+                    style={{ ...mpStyles.input, paddingLeft: 26 }}
+                    type="text" inputMode="decimal" value={price}
+                    onChange={e => { const v = e.target.value; if (/^\d*\.?\d{0,2}$/.test(v)) setPrice(v); }}
+                    placeholder="0.00" disabled={busy}
+                  />
+                </div>
+              </div>
+            )}
+
+            {status === 'error' && (
+              <p style={{ fontSize: 12, color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '8px 12px', borderRadius: 8, fontFamily: "'Poppins', sans-serif" }}>{errorMsg}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={mpStyles.cancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+              <button
+                style={{ ...mpStyles.primaryBtn, flex: 1, opacity: busy || !title.trim() ? 0.6 : 1 }}
+                onClick={handleSubmit}
+                disabled={busy || !title.trim()}
+              >
+                {status === 'rendering' ? 'Rendering…' : status === 'uploading' ? 'Uploading…' : forSale ? 'Publish & List' : 'Publish'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const mpStyles: { [key: string]: React.CSSProperties } = {
+  label: { fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 5, fontFamily: "'Poppins', sans-serif" },
+  input: { width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, fontFamily: "'Poppins', sans-serif", outline: 'none', boxSizing: 'border-box' },
+  primaryBtn: { padding: '11px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #a78bfa, #ec4899)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: "'Poppins', sans-serif" },
+  cancelBtn: { padding: '11px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: "'Poppins', sans-serif" },
+};
+
 /* ── Component ─────────────────────────────────────── */
 
 const MobileDaw: React.FC = () => {
@@ -299,6 +449,7 @@ const MobileDaw: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showFxPanel, setShowFxPanel] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
   const [topBarMode, setTopBarMode] = useState<'arrange' | 'edit' | 'settings'>('arrange');
   const [audioImportTrackId, setAudioImportTrackId] = useState<number | null>(null);
 
@@ -707,11 +858,19 @@ const MobileDaw: React.FC = () => {
           </button>
         </div>
 
-        <button style={{ ...st.topBtn, opacity: saving ? 0.5 : 1 }} onClick={handleSave} disabled={saving}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button style={{ ...st.topBtn, opacity: saving ? 0.5 : 1 }} onClick={handleSave} disabled={saving}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+            </svg>
+          </button>
+          <button style={st.topBtn} onClick={() => setShowPublish(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
+              <path d="M5 19h14"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Recording indicator */}
@@ -1425,6 +1584,14 @@ const MobileDaw: React.FC = () => {
         <div style={st.mixerSheet}>
           <MixerPanel />
         </div>
+      )}
+
+      {/* ══════ PUBLISH MODAL ══════ */}
+      {showPublish && (
+        <MobilePublishModal
+          projectName={projectName}
+          onClose={() => setShowPublish(false)}
+        />
       )}
 
       <style>{`

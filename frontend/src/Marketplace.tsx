@@ -45,6 +45,7 @@ const Marketplace = () => {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<'all' | 'track' | 'publication'>('all');
   const [priceFilter, setPriceFilter] = useState<'all' | 'free' | 'paid'>('all');
+  const [sortOrder, setSortOrder] = useState<'none' | 'asc' | 'desc'>('none');
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
@@ -138,20 +139,26 @@ const Marketplace = () => {
     return p === 0 ? 'Free' : `$${p.toFixed(2)}`;
   };
 
-  const filteredItems = items.filter(item => {
-    if (priceFilter === 'free' && getPrice(item) !== 0) return false;
-    if (priceFilter === 'paid' && getPrice(item) === 0) return false;
-    if (typeFilter === 'track' && item.item_type !== 'track') return false;
-    if (typeFilter === 'publication' && item.item_type !== 'publication') return false;
-    const q = search.toLowerCase();
-    return (
-      item.title.toLowerCase().includes(q) ||
-      (item.username || '').toLowerCase().includes(q) ||
-      (item.display_name || '').toLowerCase().includes(q)
-    );
-  });
+  const filteredItems = items
+    .filter(item => {
+      if (priceFilter === 'free' && getPrice(item) !== 0) return false;
+      if (priceFilter === 'paid' && getPrice(item) === 0) return false;
+      if (typeFilter === 'track' && item.item_type !== 'track') return false;
+      if (typeFilter === 'publication' && item.item_type !== 'publication') return false;
+      const q = search.toLowerCase();
+      return (
+        item.title.toLowerCase().includes(q) ||
+        (item.username || '').toLowerCase().includes(q) ||
+        (item.display_name || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortOrder === 'asc') return getPrice(a) - getPrice(b);
+      if (sortOrder === 'desc') return getPrice(b) - getPrice(a);
+      return 0;
+    });
 
-  const anyFilterActive = typeFilter !== 'all' || priceFilter !== 'all';
+  const anyFilterActive = typeFilter !== 'all' || priceFilter !== 'all' || sortOrder !== 'none';
 
   const isItemPlaying = (item: MarketplaceItem) =>
     isPlaying && currentTrack?.id === item.id && currentTrack?.type === item.item_type;
@@ -389,10 +396,25 @@ const Marketplace = () => {
                       {priceFilter === f.key && <svg style={{ marginLeft: 'auto' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
                     </div>
                   ))}
+                  <div style={{ ...styles.filterSection, marginTop: 6 }}>Sort by Price</div>
+                  {([
+                    { key: 'none', label: 'Default' },
+                    { key: 'asc', label: 'Low to High' },
+                    { key: 'desc', label: 'High to Low' },
+                  ] as const).map(f => (
+                    <div
+                      key={f.key}
+                      style={{ ...styles.filterOption, ...(sortOrder === f.key ? styles.filterOptionActive : {}) }}
+                      onClick={() => setSortOrder(f.key)}
+                    >
+                      {f.label}
+                      {sortOrder === f.key && <svg style={{ marginLeft: 'auto' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                  ))}
                   {anyFilterActive && (
                     <div
                       style={{ ...styles.filterOption, color: 'rgba(255,100,100,0.8)', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 4 }}
-                      onClick={() => { setTypeFilter('all'); setPriceFilter('all'); }}
+                      onClick={() => { setTypeFilter('all'); setPriceFilter('all'); setSortOrder('none'); }}
                     >
                       Clear filters
                     </div>
@@ -403,7 +425,7 @@ const Marketplace = () => {
           </div>
 
           {/* Stats row */}
-          <div style={styles.statsRow}>
+          <div className="marketplace-stats" style={styles.statsRow}>
             <div style={styles.statCard}>
               <span style={styles.statNum}>{items.length}</span>
               <span style={styles.statLabel}>Total Items</span>
@@ -726,6 +748,11 @@ const Marketplace = () => {
         .card-play-btn { opacity: 0; transition: opacity 0.15s; }
         .card-img-wrap:hover .card-play-btn { opacity: 1 !important; }
         .card-heart-btn:hover { transform: scale(1.15); }
+        @media (max-width: 768px) {
+          .marketplace-main { padding: 16px 14px 220px !important; }
+          .marketplace-stats { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+          .marketplace-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+        }
       `}</style>
     </div>
   );
