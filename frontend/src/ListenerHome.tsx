@@ -126,16 +126,30 @@ const ListenerHome = () => {
 
   // ── Playback helpers (Chris) ──────────────────────────────────────────────
 
+  const toQueueItem = (item: Track) => ({
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    artist: item.display_name || item.username || 'Unknown',
+    audioUrl: item.audio_file,
+    coverImage: item.cover_image || item.profile_picture || null,
+    artistHandle: item.username,
+  });
+
+  const buildHomeQueue = () => {
+    const seen = new Set<string>();
+    const items: Track[] = [];
+    for (const t of [allTracks[0], ...newReleases]) {
+      if (!t) continue;
+      const key = `${t.type}-${t.id}`;
+      if (!seen.has(key)) { seen.add(key); items.push(t); }
+    }
+    return items.map(toQueueItem);
+  };
+
   const playTrack = (item: Track) => {
-    usePlayerStore.getState().play({
-      id: item.id,
-      type: item.type,
-      title: item.title,
-      artist: item.display_name || item.username || 'Unknown',
-      audioUrl: item.audio_file,
-      coverImage: item.cover_image || item.profile_picture || null,
-      artistHandle: item.username,
-    });
+    const queue = buildHomeQueue();
+    usePlayerStore.getState().play(toQueueItem(item), { queue });
   };
 
   const isPlaying = (item: Track) =>
