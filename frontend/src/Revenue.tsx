@@ -5,6 +5,7 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { getTrackGradient } from './utils/trackGradient';
 import { useNotificationStore } from './stores/notificationStore';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 interface Sale {
   id: number;
@@ -71,7 +72,7 @@ const Revenue = () => {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div style={styles.pageWrapper}>
+    <div style={{ ...styles.pageWrapper, ...fullBleedSafeArea }}>
       {/* Sidebar */}
       <aside className="desktop-sidebar" style={styles.sidebar}>
         <div style={styles.sidebarTop}>

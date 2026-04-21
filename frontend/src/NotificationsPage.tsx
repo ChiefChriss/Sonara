@@ -6,6 +6,7 @@ import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getUserGradient } from './utils/userGradient';
 
 interface Notification {
@@ -35,7 +36,7 @@ const NotificationsPage = () => {
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const { clearCount, startPolling, fetchUnreadCount } = useNotificationStore();
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     document.title = 'Notifications | Sonara';

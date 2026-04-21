@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { getApiBaseUrl } from '../utils/apiBase';
 
 type ModalMode = 'upload_track' | 'edit_track' | 'edit_pub';
 
@@ -27,7 +28,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
     const [error, setError] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     useEffect(() => {
         if (isOpen) {

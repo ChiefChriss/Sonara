@@ -6,6 +6,8 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { getTrackGradient } from './utils/trackGradient';
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
+import { fullBleedSafeArea } from './utils/safeArea';
+import { PlayGlyph, PauseGlyph } from './components/MediaIcons';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,6 +161,15 @@ const Marketplace = () => {
     if (currentTrack?.id === item.id && currentTrack?.type === item.item_type) {
       store.togglePlayPause();
     } else {
+      const queue = filteredItems.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        artist: entry.display_name || entry.username,
+        artistHandle: entry.username,
+        audioUrl: entry.audio_file,
+        coverImage: entry.cover_image || null,
+        type: entry.item_type,
+      }));
       store.play({
         id: item.id,
         title: item.title,
@@ -167,7 +178,7 @@ const Marketplace = () => {
         audioUrl: item.audio_file,
         coverImage: item.cover_image || null,
         type: item.item_type,
-      });
+      }, { queue });
     }
   };
 
@@ -274,7 +285,7 @@ const Marketplace = () => {
 
 
   return (
-    <div style={styles.pageWrapper}>
+    <div style={{ ...styles.pageWrapper, ...fullBleedSafeArea }}>
       {/* Sidebar */}
       <aside className="desktop-sidebar" style={styles.sidebar}>
         <div style={styles.sidebarTop}>
@@ -454,7 +465,7 @@ const Marketplace = () => {
                           style={{ ...styles.cardPlayBtn, opacity: isItemPlaying(item) ? 1 : undefined }}
                           onClick={e => { e.preventDefault(); e.stopPropagation(); playItem(item); }}
                         >
-                          {isItemPlaying(item) ? '⏸' : '▶'}
+                          {isItemPlaying(item) ? <PauseGlyph size={15} fill="#fff" /> : <PlayGlyph size={15} fill="#fff" />}
                         </button>
                         {/* Like button */}
                         <button
@@ -476,7 +487,10 @@ const Marketplace = () => {
                           {item.display_name || item.username}
                         </p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
-                          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>▶ {formatCount(item.play_count)}</span>
+                          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <PlayGlyph size={10} fill="rgba(255,255,255,0.35)" />
+                            {formatCount(item.play_count)}
+                          </span>
                           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                             {formatCount(item.like_count)}

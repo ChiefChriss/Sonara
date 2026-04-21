@@ -22,14 +22,225 @@ const fmt = (seconds: number) => {
 const TRACK_ICONS: Record<string, string> = { audio: '🎙', instrument: '🎹', drums: '🥁' };
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-const NEW_TRACK_OPTIONS: { id: string; label: string; desc: string; icon: string; color: string; badge?: string; storeType: 'audio' | 'instrument' }[] = [
-  { id: 'voice', label: 'Voice / Audio', desc: 'Record with FX', icon: '🎙', color: '#e74c3c', storeType: 'audio' },
-  { id: 'guitar', label: 'Guitar', desc: 'Jam with Amps + FX', icon: '🎸', color: '#1abc9c', storeType: 'audio' },
-  { id: 'bass', label: 'Bass', desc: 'Find your signature tone', icon: '🎸', color: '#3498db', storeType: 'audio' },
-  { id: 'looper', label: 'Looper', desc: 'Easily make complete tracks', icon: '🔁', color: '#e67e22', storeType: 'audio' },
-  { id: 'instrument', label: 'Virtual Instruments', desc: 'Record keys, pads and more', icon: '🎹', color: '#2ecc71', badge: 'MIDI', storeType: 'instrument' },
-  { id: 'sampler', label: 'Sampler', desc: 'Turn any sound into an instrument', icon: '🎛', color: '#9b59b6', badge: 'MIDI', storeType: 'instrument' },
+const NEW_TRACK_OPTIONS: {
+  id: string;
+  label: string;
+  desc: string;
+  icon: string;
+  color: string;
+  badge?: string;
+  storeType: 'audio' | 'instrument';
+  trackName: string;
+  instrumentId?: string;
+  volume?: number;
+  pan?: number;
+  effects?: Partial<TrackEffects>;
+}[] = [
+  {
+    id: 'voice',
+    label: 'Voice / Audio',
+    desc: 'Record with FX',
+    icon: '🎙',
+    color: '#e74c3c',
+    storeType: 'audio',
+    trackName: 'Voice',
+    volume: 85,
+    effects: { reverbMix: 12, filterEnabled: true, filterType: 'highpass', filterFreq: 120 },
+  },
+  {
+    id: 'guitar',
+    label: 'Guitar',
+    desc: 'Jam with Amps + FX',
+    icon: '🎸',
+    color: '#1abc9c',
+    storeType: 'audio',
+    trackName: 'Guitar',
+    volume: 82,
+    pan: -10,
+    effects: { delayMix: 18, delayTime: 0.18, delayFeedback: 28, reverbMix: 10 },
+  },
+  {
+    id: 'bass',
+    label: 'Bass',
+    desc: 'Find your signature tone',
+    icon: '🎸',
+    color: '#3498db',
+    storeType: 'instrument',
+    trackName: 'Bassline',
+    badge: 'MIDI',
+    instrumentId: 'bass-electric',
+    volume: 80,
+    effects: { filterEnabled: true, filterType: 'lowpass', filterFreq: 1800 },
+  },
+  {
+    id: 'looper',
+    label: 'Looper',
+    desc: 'Easily make complete tracks',
+    icon: '🔁',
+    color: '#e67e22',
+    storeType: 'audio',
+    trackName: 'Looper',
+    volume: 80,
+    effects: { delayMix: 20, delayTime: 0.25, delayFeedback: 32, reverbMix: 15 },
+  },
+  {
+    id: 'instrument',
+    label: 'Virtual Instruments',
+    desc: 'Record keys, pads and more',
+    icon: '🎹',
+    color: '#2ecc71',
+    badge: 'MIDI',
+    storeType: 'instrument',
+    trackName: 'Keys',
+    instrumentId: 'salamander-piano',
+    volume: 78,
+  },
+  {
+    id: 'sampler',
+    label: 'Sampler',
+    desc: 'Turn any sound into an instrument',
+    icon: '🎛',
+    color: '#9b59b6',
+    badge: 'MIDI',
+    storeType: 'instrument',
+    trackName: 'Sampler',
+    instrumentId: 'guitar-acoustic',
+    volume: 76,
+  },
 ];
+
+/* ── Isolated currentTime consumers (prevent full-tree re-renders at 60fps) ─── */
+
+const PlayheadLine: React.FC<{ pxPerBeat: number; bpm: number }> = React.memo(({ pxPerBeat, bpm }) => {
+  const currentTime = useDawStore((s) => s.currentTime);
+  const x = (currentTime / 60) * bpm * pxPerBeat;
+  return (
+    <div style={{
+      position: 'absolute', top: 0, bottom: 0, width: 2, left: 0,
+      background: '#e74c3c', boxShadow: '0 0 8px rgba(231,76,60,0.5)',
+      zIndex: 5, pointerEvents: 'none' as const,
+      transform: `translateX(${x}px)`, willChange: 'transform' as const,
+    }} />
+  );
+});
+
+const TimeDisplay: React.FC<{ style: React.CSSProperties }> = React.memo(({ style }) => {
+  const currentTime = useDawStore((s) => s.currentTime);
+  return <span style={style}>{fmt(currentTime)}</span>;
+});
+
+const RecordingClipView: React.FC<{
+  recordStartTime: number; bpm: number; pxPerBeat: number;
+}> = React.memo(({ recordStartTime, bpm, pxPerBeat }) => {
+  const currentTime = useDawStore((s) => s.currentTime);
+  const startBeat = Math.max(0, (recordStartTime / 60) * bpm);
+  const nowBeat = Math.max(startBeat + 0.25, (currentTime / 60) * bpm);
+  const left = startBeat * pxPerBeat;
+  const width = Math.max((nowBeat - startBeat) * pxPerBeat, 8);
+  return (
+    <div style={{
+      position: 'absolute', left, width, top: 1, bottom: 1, borderRadius: 6, overflow: 'hidden',
+      background: 'linear-gradient(135deg, rgba(231,76,60,0.9), rgba(231,76,60,0.55))',
+      border: '1px solid rgba(255,255,255,0.25)', boxShadow: '0 1px 8px rgba(231,76,60,0.35)',
+    }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.2) 0 2px, transparent 2px 6px)' }} />
+      <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: 0.2, color: '#fff', padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', position: 'relative', zIndex: 1 }}>Recording...</span>
+    </div>
+  );
+});
+
+const ClipItem = React.memo(({ clip, trackColor, trackType, trackId, pxPerBeat, openClipEdit }: any) => {
+  const left = clip.startBeat * pxPerBeat;
+  const width = Math.max(clip.duration * pxPerBeat, 8);
+  const isAudio = !!(clip.waveformPeaks && clip.waveformPeaks.length > 0);
+  const isMidi = !!(clip.notes && clip.notes.length > 0 && !isAudio);
+
+  return (
+    <div
+      onClick={() => { if (trackType !== 'audio') openClipEdit(trackId, clip.id); }}
+      style={{
+        position: 'absolute', left, width, top: 1, bottom: 1,
+        borderRadius: 6, overflow: 'hidden',
+        background: isAudio
+          ? `linear-gradient(135deg, ${trackColor}dd, ${trackColor}88)`
+          : trackColor,
+        opacity: isAudio ? 1 : 0.85,
+        border: isAudio ? `1px solid ${trackColor}` : 'none',
+        boxShadow: isAudio ? `0 1px 6px ${trackColor}44` : 'none',
+      }}
+    >
+      {isAudio && (
+        <>
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.1) 100%)',
+          }} />
+          <svg width="100%" height="100%" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
+            <defs>
+              <linearGradient id={`wg-${clip.id}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.35)" />
+              </linearGradient>
+            </defs>
+            {(() => {
+              const peaks = clip.waveformPeaks!;
+              const barCount = Math.min(peaks.length, Math.floor(width / 2));
+              const step = peaks.length / barCount;
+              const gap = 0.6;
+              const barW = Math.max((100 / barCount) - gap, 0.3);
+              return Array.from({ length: barCount }, (_, i) => {
+                const idx = Math.floor(i * step);
+                const peak = peaks[idx] || 0;
+                const h = Math.max(peak * 80, 4);
+                const x = (i / barCount) * 100;
+                return (
+                  <rect
+                    key={i}
+                    x={`${x}%`}
+                    y={`${50 - h / 2}%`}
+                    width={`${barW}%`}
+                    height={`${h}%`}
+                    rx="0.8"
+                    fill={`url(#wg-${clip.id})`}
+                  />
+                );
+              });
+            })()}
+            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+          </svg>
+        </>
+      )}
+
+      {isMidi && (
+        <svg width="100%" height="100%" viewBox={`0 0 ${clip.duration} 24`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
+          {(() => {
+            const pitches = clip.notes!.map((n: any) => n.pitch);
+            const minP = Math.min(...pitches);
+            const range = Math.max(Math.max(...pitches) - minP, 1);
+            return clip.notes!.map((n: any) => (
+              <rect
+                key={n.id}
+                x={n.startBeat}
+                y={24 - ((n.pitch - minP) / range) * 20 - 2}
+                width={Math.max(n.duration, 0.15)}
+                height={2}
+                fill="rgba(255,255,255,0.7)"
+                rx={0.3}
+              />
+            ));
+          })()}
+        </svg>
+      )}
+
+      <span style={{
+        fontSize: 8, fontWeight: 600, letterSpacing: 0.2, color: '#fff',
+        padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden',
+        position: 'relative', zIndex: 1,
+        textShadow: isAudio ? '0 1px 2px rgba(0,0,0,0.6)' : 'none',
+      }}>{clip.name}</span>
+    </div>
+  );
+});
 
 /* ── Component ─────────────────────────────────────── */
 
@@ -40,7 +251,6 @@ const MobileDaw: React.FC = () => {
   const tracks = useDawStore((s) => s.tracks);
   const isPlaying = useDawStore((s) => s.isPlaying);
   const isRecording = useDawStore((s) => s.isRecording);
-  const currentTime = useDawStore((s) => s.currentTime);
   const bpm = useDawStore((s) => s.bpm);
   const projectName = useDawStore((s) => s.projectName);
   const setProjectName = useDawStore((s) => s.setProjectName);
@@ -53,6 +263,7 @@ const MobileDaw: React.FC = () => {
   const toggleSolo = useDawStore((s) => s.toggleSolo);
   const setTrackVolume = useDawStore((s) => s.setTrackVolume);
   const setTrackPan = useDawStore((s) => s.setTrackPan);
+  const setTrackColor = useDawStore((s) => s.setTrackColor);
   const setTrackEffects = useDawStore((s) => s.setTrackEffects);
   const setTrackInstrument = useDawStore((s) => s.setTrackInstrument);
   const pianoRollClipId = useDawStore((s) => s.pianoRollClipId);
@@ -89,14 +300,37 @@ const MobileDaw: React.FC = () => {
   const [showFxPanel, setShowFxPanel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [topBarMode, setTopBarMode] = useState<'arrange' | 'edit' | 'settings'>('arrange');
+  const [audioImportTrackId, setAudioImportTrackId] = useState<number | null>(null);
 
   const renameRef = useRef<HTMLInputElement>(null);
+  const audioImportInputRef = useRef<HTMLInputElement>(null);
+  const rulerScrollRef = useRef<HTMLDivElement>(null);
+  const clipScrollRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const isSyncingScrollRef = useRef(false);
+
+  const syncScroll = useCallback((source: HTMLElement) => {
+    if (isSyncingScrollRef.current) return;
+    isSyncingScrollRef.current = true;
+    const left = source.scrollLeft;
+    if (rulerScrollRef.current && rulerScrollRef.current !== source) {
+      rulerScrollRef.current.scrollLeft = left;
+    }
+    clipScrollRefs.current.forEach((el) => {
+      if (el !== source) el.scrollLeft = left;
+    });
+    requestAnimationFrame(() => { isSyncingScrollRef.current = false; });
+  }, []);
 
   // Audio recording state
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordStartTimeRef = useRef<number>(0);
-  const [recordingTrackId, setRecordingTrackId] = useState<number | null>(null);
+  const [recordingTrackId, setRecordingTrackIdState] = useState<number | null>(null);
+  const recordingTrackIdRef = useRef<number | null>(null);
+  const setRecordingTrackId = useCallback((id: number | null) => {
+    recordingTrackIdRef.current = id;
+    setRecordingTrackIdState(id);
+  }, []);
   const [keyboardTrackId, setKeyboardTrackId] = useState<number | null>(null);
   const [keyboardClipId, setKeyboardClipId] = useState<number | null>(null);
   const [kbOctave, setKbOctave] = useState(3);
@@ -106,10 +340,16 @@ const MobileDaw: React.FC = () => {
   useEffect(() => { if (renamingTrackId && renameRef.current) renameRef.current.focus(); }, [renamingTrackId]);
 
   /* ── Transport handlers ─── */
-  const handleTogglePlay = async () => {
-    await initAudio();
-    if (isPlaying) pause(); else play();
-    togglePlay();
+  const handleTogglePlay = () => {
+    // Read isPlaying live from the store so rapid taps don't race on stale
+    // React state.
+    const wasPlaying = useDawStore.getState().isPlaying;
+    const run = async () => {
+      await initAudio();
+      if (wasPlaying) pause(); else await play();
+      togglePlay();
+    };
+    run();
   };
 
   const handleRewind = () => {
@@ -144,7 +384,7 @@ const MobileDaw: React.FC = () => {
         const curBpm = useDawStore.getState().bpm;
         const data = await decodeAudioFile(file, curBpm);
 
-        let targetTrackId = recordingTrackId;
+        let targetTrackId = recordingTrackIdRef.current;
         if (!targetTrackId) {
           const audioTracks = useDawStore.getState().tracks.filter(t => t.type === 'audio');
           if (audioTracks.length > 0) {
@@ -163,13 +403,14 @@ const MobileDaw: React.FC = () => {
 
       recordStartTimeRef.current = useDawStore.getState().currentTime;
 
-      // Find or select a target audio track
+      // Find or select a target audio track (read live store — tracks closure may be stale)
+      const liveTracks = useDawStore.getState().tracks;
       const sel = selectedTrackId;
-      const selTrack = sel ? tracks.find(t => t.id === sel) : null;
+      const selTrack = sel ? liveTracks.find(t => t.id === sel) : null;
       if (selTrack && selTrack.type === 'audio') {
         setRecordingTrackId(sel);
       } else {
-        const audioTracks = tracks.filter(t => t.type === 'audio');
+        const audioTracks = liveTracks.filter(t => t.type === 'audio');
         if (audioTracks.length > 0) {
           setRecordingTrackId(audioTracks[audioTracks.length - 1].id);
         } else {
@@ -186,7 +427,7 @@ const MobileDaw: React.FC = () => {
       console.error('Mic access denied:', err);
       alert('Microphone access is required to record audio. Please allow mic access and try again.');
     }
-  }, [selectedTrackId, tracks, addTrack, addAudioClip, recordingTrackId]);
+  }, [selectedTrackId, addTrack, addAudioClip, setRecordingTrackId]);
 
   const stopMicRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -197,19 +438,23 @@ const MobileDaw: React.FC = () => {
 
   const handleRecordToggle = async () => {
     await initAudio();
-    if (isRecording) {
+    // Read live store state to avoid races from stale React closures.
+    const s = useDawStore.getState();
+    const wasRecording = s.isRecording;
+    const wasPlaying = s.isPlaying;
+    if (wasRecording) {
       stopMicRecording();
-      if (isPlaying) { pause(); togglePlay(); }
+      if (wasPlaying) { pause(); togglePlay(); }
       toggleRecord();
       setRecordingTrackId(null);
     } else {
       if (keyboardTrackId) {
         toggleRecord();
-        if (!isPlaying) { play(); togglePlay(); }
+        if (!wasPlaying) { await play(); togglePlay(); }
       } else {
         await startMicRecording();
         toggleRecord();
-        if (!isPlaying) { play(); togglePlay(); }
+        if (!wasPlaying) { await play(); togglePlay(); }
       }
     }
   };
@@ -231,15 +476,16 @@ const MobileDaw: React.FC = () => {
     setSaving(false);
   }, []);
 
-  const openClipEdit = (trackId: number, clipId: number) => {
-    const trk = tracks.find(t => t.id === trackId);
+  const openClipEdit = useCallback((trackId: number, clipId: number) => {
+    const liveTracks = useDawStore.getState().tracks;
+    const trk = liveTracks.find(t => t.id === trackId);
     if (trk && trk.type !== 'audio') {
       setKeyboardTrackId(trackId);
       setKeyboardClipId(clipId);
       setSelectedTrackId(trackId);
       rebuildPreviewSynth(trk.instrument);
     }
-  };
+  }, []);
 
   const openFullPianoRoll = (trackId: number, clipId: number) => {
     selectClip(clipId);
@@ -252,6 +498,34 @@ const MobileDaw: React.FC = () => {
     if (renameValue.trim()) renameTrack(trackId, renameValue.trim());
     setRenamingTrackId(null);
   };
+
+  const openAudioImport = useCallback((trackId: number) => {
+    setAudioImportTrackId(trackId);
+    audioImportInputRef.current?.click();
+  }, []);
+
+  const handleAudioImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const targetTrackId = audioImportTrackId;
+    setAudioImportTrackId(null);
+
+    if (!file || !targetTrackId) return;
+    if (!file.type.startsWith('audio/')) {
+      alert('Please choose an audio file.');
+      return;
+    }
+
+    try {
+      const curBpm = useDawStore.getState().bpm;
+      const currentBeat = (useDawStore.getState().currentTime / 60) * curBpm;
+      const data = await decodeAudioFile(file, curBpm);
+      addAudioClip(targetTrackId, Math.max(0, currentBeat), data.name, data.durationBeats, data.url, data.peaks);
+    } catch (err) {
+      console.error('Audio import failed:', err);
+      alert('Could not import that audio file.');
+    }
+  }, [audioImportTrackId, addAudioClip]);
 
   const openKeyboard = useCallback((trackId: number) => {
     const track = useDawStore.getState().tracks.find(t => t.id === trackId);
@@ -306,6 +580,56 @@ const MobileDaw: React.FC = () => {
     setInstrumentPickerTrackId(null);
   }, [setTrackInstrument]);
 
+  const createTrackFromOption = useCallback((opt: (typeof NEW_TRACK_OPTIONS)[number]) => {
+    const stateBefore = useDawStore.getState();
+    const existingIds = new Set(stateBefore.tracks.map(t => t.id));
+
+    addTrack(opt.storeType);
+
+    const stateAfter = useDawStore.getState();
+    const createdTrack =
+      stateAfter.tracks.find(t => !existingIds.has(t.id)) ||
+      stateAfter.tracks[stateAfter.tracks.length - 1];
+    if (!createdTrack) return;
+
+    renameTrack(createdTrack.id, opt.trackName);
+    setTrackColor(createdTrack.id, opt.color);
+    if (typeof opt.volume === 'number') setTrackVolume(createdTrack.id, opt.volume);
+    if (typeof opt.pan === 'number') setTrackPan(createdTrack.id, opt.pan);
+
+    if (opt.instrumentId && createdTrack.type !== 'audio') {
+      setTrackInstrument(createdTrack.id, opt.instrumentId as any);
+      rebuildTrackSynth({ ...createdTrack, instrument: opt.instrumentId as any });
+      rebuildPreviewSynth(opt.instrumentId);
+    }
+
+    if (opt.effects) {
+      setTrackEffects(createdTrack.id, opt.effects);
+      const updatedTrack = useDawStore.getState().tracks.find(t => t.id === createdTrack.id);
+      if (updatedTrack) {
+        updateEffects({
+          ...updatedTrack,
+          effects: { ...(updatedTrack.effects || DEFAULT_EFFECTS), ...opt.effects },
+        });
+      }
+    }
+
+    const withParams = useDawStore.getState().tracks.find(t => t.id === createdTrack.id);
+    if (withParams) updateTrackParams(withParams);
+
+    setSelectedTrackId(createdTrack.id);
+    setMenuTrackId(null);
+    setShowNewTrackSheet(false);
+  }, [
+    addTrack,
+    renameTrack,
+    setTrackColor,
+    setTrackVolume,
+    setTrackPan,
+    setTrackInstrument,
+    setTrackEffects,
+  ]);
+
   const handleFxUpdate = useCallback((trackId: number, changes: Partial<TrackEffects>) => {
     setTrackEffects(trackId, changes);
     const track = useDawStore.getState().tracks.find(t => t.id === trackId);
@@ -313,9 +637,24 @@ const MobileDaw: React.FC = () => {
   }, [setTrackEffects]);
 
   useEffect(() => {
-    const h = async () => { await initAudio(); document.removeEventListener('click', h); };
+    // Initialize AudioContext on the first user interaction. Use pointerdown
+    // (fires before click) and touchend (for iOS Safari quirks) to maximize
+    // the chance we catch the gesture. Once running, subsequent play() calls
+    // don't need a gesture.
+    const h = () => {
+      initAudio();
+      document.removeEventListener('pointerdown', h);
+      document.removeEventListener('touchend', h);
+      document.removeEventListener('click', h);
+    };
+    document.addEventListener('pointerdown', h);
+    document.addEventListener('touchend', h);
     document.addEventListener('click', h);
-    return () => document.removeEventListener('click', h);
+    return () => {
+      document.removeEventListener('pointerdown', h);
+      document.removeEventListener('touchend', h);
+      document.removeEventListener('click', h);
+    };
   }, []);
 
   /* ── Layout math ─── */
@@ -324,15 +663,21 @@ const MobileDaw: React.FC = () => {
   const furthest = tracks.reduce((max, t) => t.clips.reduce((m, c) => Math.max(m, c.startBeat + c.duration), max), 0);
   const totalBars = Math.max(16, Math.ceil(furthest / beatsPerBar) + 4);
   const rulerW = totalBars * beatsPerBar * pxPerBeat;
-  const headX = (currentTime / 60) * bpm * pxPerBeat;
-
   const selectedTrack = tracks.find(t => t.id === selectedTrackId) || null;
   const fxTrack = selectedTrack;
   const fx = fxTrack?.effects || DEFAULT_EFFECTS;
+  const hasSolo = tracks.some(t => t.solo);
 
   /* ── Render ─── */
   return (
-    <div style={st.container}>
+    <div className="sonara-mobile-daw" style={st.container}>
+      <input
+        ref={audioImportInputRef}
+        type="file"
+        accept="audio/*"
+        onChange={handleAudioImport}
+        style={{ display: 'none' }}
+      />
 
       {/* ══════ TOP BAR ══════ */}
       <div style={st.topBar}>
@@ -374,7 +719,7 @@ const MobileDaw: React.FC = () => {
         <div style={st.recIndicator}>
           <span style={st.recDot} />
           <span style={{ fontSize: 12, fontWeight: 600 }}>Recording</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>{fmt(currentTime)}</span>
+          <TimeDisplay style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }} />
           {recordingTrackId && (() => {
             const rt = tracks.find(t => t.id === recordingTrackId);
             return rt ? <span style={{ fontSize: 11, color: rt.color, marginLeft: 'auto' }}>→ {rt.name}</span> : null;
@@ -384,13 +729,16 @@ const MobileDaw: React.FC = () => {
 
       {/* ══════ TIMELINE RULER ══════ */}
       <div style={st.rulerWrap}>
-        <div style={st.timeLabel}>{fmt(currentTime)}</div>
-        <div style={st.rulerScroll}>
+        <div
+          style={st.rulerScroll}
+          ref={rulerScrollRef}
+          onScroll={(e) => syncScroll(e.currentTarget)}
+        >
           <div style={{ width: rulerW, height: '100%', position: 'relative' }}>
             {Array.from({ length: totalBars + 1 }, (_, i) => (
               <span key={i} style={{ ...st.barMark, left: i * beatsPerBar * pxPerBeat }}>{i + 1}</span>
             ))}
-            <div style={{ ...st.playhead, left: headX }} />
+            <PlayheadLine pxPerBeat={pxPerBeat} bpm={bpm} />
           </div>
         </div>
       </div>
@@ -399,10 +747,10 @@ const MobileDaw: React.FC = () => {
       <div style={st.trackList}>
         {tracks.map((track) => {
           const preset = getPreset(track.instrument);
-          const hasSolo = tracks.some(t => t.solo);
           const dimmed = hasSolo && !track.solo;
           const selected = selectedTrackId === track.id;
-          const hasActiveFx = fx.reverbMix > 0 || fx.delayMix > 0 || fx.filterEnabled;
+          const trackFx = track.effects || DEFAULT_EFFECTS;
+          const hasActiveFx = trackFx.reverbMix > 0 || trackFx.delayMix > 0 || trackFx.filterEnabled;
 
           return (
             <div
@@ -480,128 +828,30 @@ const MobileDaw: React.FC = () => {
               </div>
 
               {/* Clip previews */}
-              <div style={st.clipArea}>
+              <div
+                style={st.clipArea}
+                ref={(el) => {
+                  if (el) clipScrollRefs.current.set(track.id, el);
+                  else clipScrollRefs.current.delete(track.id);
+                }}
+                onScroll={(e) => syncScroll(e.currentTarget)}
+              >
                 <div style={{ width: rulerW, height: '100%', position: 'relative' }}>
-                  {track.clips.map((clip) => {
-                    const left = clip.startBeat * pxPerBeat;
-                    const width = Math.max(clip.duration * pxPerBeat, 8);
-                    const isAudio = !!(clip.waveformPeaks && clip.waveformPeaks.length > 0);
-                    const isMidi = !!(clip.notes && clip.notes.length > 0 && !isAudio);
-
-                    return (
-                      <div
-                        key={clip.id}
-                        onClick={() => { if (track.type !== 'audio') openClipEdit(track.id, clip.id); }}
-                        style={{
-                          position: 'absolute', left, width, top: 1, bottom: 1,
-                          borderRadius: 6, overflow: 'hidden',
-                          background: isAudio
-                            ? `linear-gradient(135deg, ${track.color}dd, ${track.color}88)`
-                            : track.color,
-                          opacity: isAudio ? 1 : 0.85,
-                          border: isAudio ? `1px solid ${track.color}` : 'none',
-                          boxShadow: isAudio ? `0 1px 6px ${track.color}44` : 'none',
-                        }}
-                      >
-                        {/* Audio waveform */}
-                        {isAudio && (
-                          <>
-                            <div style={{
-                              position: 'absolute', inset: 0,
-                              background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.1) 100%)',
-                            }} />
-                            <svg width="100%" height="100%" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
-                              <defs>
-                                <linearGradient id={`wg-${clip.id}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
-                                  <stop offset="100%" stopColor="rgba(255,255,255,0.35)" />
-                                </linearGradient>
-                              </defs>
-                              {(() => {
-                                const peaks = clip.waveformPeaks!;
-                                const barCount = Math.min(peaks.length, Math.floor(width / 2));
-                                const step = peaks.length / barCount;
-                                const gap = 0.6;
-                                const barW = Math.max((100 / barCount) - gap, 0.3);
-                                return Array.from({ length: barCount }, (_, i) => {
-                                  const idx = Math.floor(i * step);
-                                  const peak = peaks[idx] || 0;
-                                  const h = Math.max(peak * 80, 4);
-                                  const x = (i / barCount) * 100;
-                                  return (
-                                    <rect
-                                      key={i}
-                                      x={`${x}%`}
-                                      y={`${50 - h / 2}%`}
-                                      width={`${barW}%`}
-                                      height={`${h}%`}
-                                      rx="0.8"
-                                      fill={`url(#wg-${clip.id})`}
-                                    />
-                                  );
-                                });
-                              })()}
-                              <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
-                            </svg>
-                          </>
-                        )}
-
-                        {/* MIDI note minimap */}
-                        {isMidi && (
-                          <svg width="100%" height="100%" viewBox={`0 0 ${clip.duration} 24`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
-                            {(() => {
-                              const pitches = clip.notes!.map(n => n.pitch);
-                              const minP = Math.min(...pitches);
-                              const range = Math.max(Math.max(...pitches) - minP, 1);
-                              return clip.notes!.map((n) => (
-                                <rect
-                                  key={n.id}
-                                  x={n.startBeat}
-                                  y={24 - ((n.pitch - minP) / range) * 20 - 2}
-                                  width={Math.max(n.duration, 0.15)}
-                                  height={2}
-                                  fill="rgba(255,255,255,0.7)"
-                                  rx={0.3}
-                                />
-                              ));
-                            })()}
-                          </svg>
-                        )}
-
-                        {/* Clip label */}
-                        <span style={{
-                          ...st.clipLabel,
-                          textShadow: isAudio ? '0 1px 2px rgba(0,0,0,0.6)' : 'none',
-                        }}>{clip.name}</span>
-                      </div>
-                    );
-                  })}
-                  {isRecording && !keyboardTrackId && recordingTrackId === track.id && (() => {
-                    const startBeat = Math.max(0, (recordStartTimeRef.current / 60) * bpm);
-                    const currentBeat = Math.max(startBeat + 0.25, (currentTime / 60) * bpm);
-                    const left = startBeat * pxPerBeat;
-                    const width = Math.max((currentBeat - startBeat) * pxPerBeat, 8);
-                    return (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left,
-                          width,
-                          top: 1,
-                          bottom: 1,
-                          borderRadius: 6,
-                          overflow: 'hidden',
-                          background: 'linear-gradient(135deg, rgba(231,76,60,0.9), rgba(231,76,60,0.55))',
-                          border: '1px solid rgba(255,255,255,0.25)',
-                          boxShadow: '0 1px 8px rgba(231,76,60,0.35)',
-                        }}
-                      >
-                        <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.2) 0 2px, transparent 2px 6px)' }} />
-                        <span style={{ ...st.clipLabel, color: '#fff' }}>Recording...</span>
-                      </div>
-                    );
-                  })()}
-                  <div style={{ ...st.playhead, left: headX }} />
+                  {track.clips.map((clip) => (
+                    <ClipItem
+                      key={clip.id}
+                      clip={clip}
+                      trackColor={track.color}
+                      trackType={track.type}
+                      trackId={track.id}
+                      pxPerBeat={pxPerBeat}
+                      openClipEdit={openClipEdit}
+                    />
+                  ))}
+                  {isRecording && !keyboardTrackId && recordingTrackId === track.id && (
+                    <RecordingClipView recordStartTime={recordStartTimeRef.current} bpm={bpm} pxPerBeat={pxPerBeat} />
+                  )}
+                  <PlayheadLine pxPerBeat={pxPerBeat} bpm={bpm} />
                 </div>
               </div>
 
@@ -624,7 +874,18 @@ const MobileDaw: React.FC = () => {
                   <button style={st.tmBtn} onClick={() => { setSelectedTrackId(track.id); setShowFxPanel(true); setTopBarMode('edit'); setMenuTrackId(null); }}>
                     FX &amp; Mix
                   </button>
-                  <button style={{ ...st.tmBtn, color: '#f87171' }} onClick={() => { deleteTrack(track.id); setMenuTrackId(null); if (selectedTrackId === track.id) setSelectedTrackId(null); }}>
+                  {track.type === 'audio' && (
+                    <button style={st.tmBtn} onClick={() => { openAudioImport(track.id); setMenuTrackId(null); }}>
+                      Import Audio
+                    </button>
+                  )}
+                  <button style={{ ...st.tmBtn, color: '#f87171' }} onClick={() => {
+                    deleteTrack(track.id);
+                    setMenuTrackId(null);
+                    if (selectedTrackId === track.id) setSelectedTrackId(null);
+                    if (keyboardTrackId === track.id) { setKeyboardTrackId(null); setKeyboardClipId(null); }
+                    if (recordingTrackIdRef.current === track.id) setRecordingTrackId(null);
+                  }}>
                     Delete
                   </button>
                 </div>
@@ -645,7 +906,7 @@ const MobileDaw: React.FC = () => {
       {/* ══════ UNDO / TIME / REDO BAR ══════ */}
       <div style={st.undoBar}>
         <button style={{ ...st.undoBtn, opacity: canUndo ? 1 : 0.3 }} onClick={undo} disabled={!canUndo}>Undo</button>
-        <span style={st.undoTime}>{fmt(currentTime)}</span>
+        <TimeDisplay style={st.undoTime} />
         <button style={{ ...st.undoBtn, opacity: canRedo ? 1 : 0.3 }} onClick={redo} disabled={!canRedo}>Redo</button>
       </div>
 
@@ -728,6 +989,8 @@ const MobileDaw: React.FC = () => {
               <span style={{ ...st.fxLabel, paddingLeft: 16, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Decay</span>
               <input
                 type="range" min={1} max={100} value={fx.reverbDecay * 10}
+                onTouchStart={() => pushUndoSnapshot('Reverb Decay')}
+                onMouseDown={() => pushUndoSnapshot('Reverb Decay')}
                 onChange={(e) => handleFxUpdate(fxTrack.id, { reverbDecay: +e.target.value / 10 })}
                 style={st.fxSlider}
               />
@@ -749,6 +1012,8 @@ const MobileDaw: React.FC = () => {
               <span style={{ ...st.fxLabel, paddingLeft: 16, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Time</span>
               <input
                 type="range" min={1} max={100} value={fx.delayTime * 100}
+                onTouchStart={() => pushUndoSnapshot('Delay Time')}
+                onMouseDown={() => pushUndoSnapshot('Delay Time')}
                 onChange={(e) => handleFxUpdate(fxTrack.id, { delayTime: +e.target.value / 100 })}
                 style={st.fxSlider}
               />
@@ -758,6 +1023,8 @@ const MobileDaw: React.FC = () => {
               <span style={{ ...st.fxLabel, paddingLeft: 16, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Feedback</span>
               <input
                 type="range" min={0} max={90} value={fx.delayFeedback}
+                onTouchStart={() => pushUndoSnapshot('Delay Feedback')}
+                onMouseDown={() => pushUndoSnapshot('Delay Feedback')}
                 onChange={(e) => handleFxUpdate(fxTrack.id, { delayFeedback: +e.target.value })}
                 style={st.fxSlider}
               />
@@ -790,6 +1057,8 @@ const MobileDaw: React.FC = () => {
                   <span style={{ ...st.fxLabel, paddingLeft: 16, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Freq</span>
                   <input
                     type="range" min={20} max={20000} value={fx.filterFreq}
+                    onTouchStart={() => pushUndoSnapshot('Filter Freq')}
+                    onMouseDown={() => pushUndoSnapshot('Filter Freq')}
                     onChange={(e) => handleFxUpdate(fxTrack.id, { filterFreq: +e.target.value })}
                     style={st.fxSlider}
                   />
@@ -825,6 +1094,8 @@ const MobileDaw: React.FC = () => {
               <span style={st.settLabel}>BPM</span>
               <input
                 type="range" min={40} max={240} value={bpm}
+                onTouchStart={() => pushUndoSnapshot('BPM')}
+                onMouseDown={() => pushUndoSnapshot('BPM')}
                 onChange={(e) => { setBpm(+e.target.value); updateBpm(+e.target.value); }}
                 style={st.fxSlider}
               />
@@ -859,7 +1130,10 @@ const MobileDaw: React.FC = () => {
         <div style={st.overlay} onClick={() => setShowMoreMenu(false)}>
           <div style={st.morePanel} onClick={(e) => e.stopPropagation()}>
             <button style={st.morePanelItem} onClick={() => { handleSave(); setShowMoreMenu(false); }}>💾 Save Project</button>
-            <button style={st.morePanelItem} onClick={() => setShowMoreMenu(false)}>📤 Export (desktop only)</button>
+            <button
+              style={{ ...st.morePanelItem, opacity: 0.4, cursor: 'not-allowed' }}
+              disabled
+            >📤 Export (desktop only)</button>
             <button style={st.morePanelItem} onClick={() => { setShowMoreMenu(false); navigate('/create'); }}>↩ Exit to Dashboard</button>
           </div>
         </div>
@@ -875,7 +1149,7 @@ const MobileDaw: React.FC = () => {
               <button
                 key={opt.id}
                 style={st.newTrackRow}
-                onClick={() => { addTrack(opt.storeType); setShowNewTrackSheet(false); }}
+                onClick={() => createTrackFromOption(opt)}
               >
                 <div style={{ ...st.newTrackIcon, background: opt.color }}>{opt.icon}</div>
                 <div style={st.newTrackMeta}>
@@ -1014,7 +1288,7 @@ const MobileDaw: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <button style={st.kbOctBtn} onClick={() => setKbOctave(o => Math.max(1, o - 1))}>‹</button>
                 <span style={st.kbOctLabel}>Oct {kbOctave}</span>
-                <button style={st.kbOctBtn} onClick={() => setKbOctave(o => Math.min(7, o + 1))}>›</button>
+                <button style={st.kbOctBtn} onClick={() => setKbOctave(o => Math.min(6, o + 1))}>›</button>
               </div>
 
               <button
@@ -1052,7 +1326,7 @@ const MobileDaw: React.FC = () => {
                 }
               </button>
 
-              <button style={st.kbTransBtn} onClick={() => { engineStop(); useDawStore.getState().stop(); engineRewind(); useDawStore.getState().rewind(); }}>
+              <button style={st.kbTransBtn} onClick={handleRewind}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)"><rect x="3" y="5" width="4" height="14" rx="1"/><polygon points="20,5 9,12 20,19"/></svg>
               </button>
 
@@ -1081,6 +1355,7 @@ const MobileDaw: React.FC = () => {
                     key={wk.pitch}
                     onTouchStart={(e) => { e.preventDefault(); kbNoteOn(wk.pitch); }}
                     onTouchEnd={(e) => { e.preventDefault(); kbNoteOff(wk.pitch); }}
+                    onTouchCancel={(e) => { e.preventDefault(); kbNoteOff(wk.pitch); }}
                     onMouseDown={() => kbNoteOn(wk.pitch)}
                     onMouseUp={() => kbNoteOff(wk.pitch)}
                     onMouseLeave={() => { if (kbActiveKeys.has(wk.pitch)) kbNoteOff(wk.pitch); }}
@@ -1120,6 +1395,7 @@ const MobileDaw: React.FC = () => {
                     key={bk.pitch}
                     onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); kbNoteOn(bk.pitch); }}
                     onTouchEnd={(e) => { e.preventDefault(); kbNoteOff(bk.pitch); }}
+                    onTouchCancel={(e) => { e.preventDefault(); kbNoteOff(bk.pitch); }}
                     onMouseDown={(e) => { e.stopPropagation(); kbNoteOn(bk.pitch); }}
                     onMouseUp={() => kbNoteOff(bk.pitch)}
                     onMouseLeave={() => { if (kbActiveKeys.has(bk.pitch)) kbNoteOff(bk.pitch); }}
@@ -1156,6 +1432,14 @@ const MobileDaw: React.FC = () => {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
         }
+        /* Dynamic viewport height: overrides the 100vh inline fallback on
+           browsers that support dvh so the transport never hides under
+           mobile browser chrome. */
+        @supports (height: 100dvh) {
+          .sonara-mobile-daw { height: 100dvh !important; }
+        }
+        /* Prevent overscroll/pull-to-refresh from exposing background */
+        html, body { overscroll-behavior: none; }
       `}</style>
     </div>
   );
@@ -1165,15 +1449,19 @@ const MobileDaw: React.FC = () => {
 
 const st: Record<string, React.CSSProperties> = {
   container: {
-    height: '100dvh', width: '100%', display: 'flex', flexDirection: 'column',
+    // 100vh as baseline; @supports rule in the injected <style> overrides with
+    // 100dvh on browsers that support dynamic viewport units.
+    height: '100vh',
+    width: '100%', display: 'flex', flexDirection: 'column',
     background: '#0d0d1a', fontFamily: "'Poppins', sans-serif", color: '#fff', overflow: 'hidden',
     position: 'relative',
   },
 
   /* Top bar */
   topBar: {
-    height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 48, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '0 8px', background: '#1a1a2e', borderBottom: '1px solid #2a2a4a', zIndex: 50,
+    paddingTop: 'env(safe-area-inset-top)',
   },
   topBtn: {
     width: 36, height: 36, borderRadius: 8, border: 'none', background: 'none',
@@ -1224,7 +1512,7 @@ const st: Record<string, React.CSSProperties> = {
     width: 66, flexShrink: 0, fontSize: 10, fontWeight: 600, color: '#a78bfa',
     textAlign: 'center', fontFamily: 'monospace', letterSpacing: 0.5,
   },
-  rulerScroll: { flex: 1, overflowX: 'auto', overflowY: 'hidden', height: '100%' },
+  rulerScroll: { flex: 1, overflowX: 'auto', overflowY: 'hidden', height: '100%', touchAction: 'pan-x' as const },
   barMark: {
     position: 'absolute', top: 2, fontSize: 9, color: 'rgba(255,255,255,0.3)',
     fontFamily: 'monospace', transform: 'translateX(2px)',
@@ -1265,7 +1553,7 @@ const st: Record<string, React.CSSProperties> = {
   },
   clipArea: {
     width: '100%', height: 38, overflowX: 'auto', overflowY: 'hidden',
-    padding: '0 8px 4px', position: 'relative',
+    padding: '0 0 4px', position: 'relative', touchAction: 'pan-x' as const,
   },
   clipLabel: {
     fontSize: 8, fontWeight: 600, letterSpacing: 0.2,
@@ -1414,7 +1702,9 @@ const st: Record<string, React.CSSProperties> = {
 
   /* Mixer bottom sheet */
   mixerSheet: {
-    position: 'fixed', left: 0, right: 0, bottom: 84, zIndex: 100,
+    position: 'fixed', left: 0, right: 0,
+    bottom: 'calc(84px + env(safe-area-inset-bottom))',
+    zIndex: 100,
     maxHeight: '40vh', overflowY: 'auto',
   },
 

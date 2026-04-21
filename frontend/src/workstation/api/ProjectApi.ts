@@ -1,8 +1,9 @@
 // API service for project save/load and publishing
 // Endpoints follow the pattern: ${API_BASE_URL}/api/auth/...
 
-const getApiBase = () => 
-    import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+import { getApiBaseUrl } from '../../utils/apiBase';
+
+const getApiBase = () => getApiBaseUrl();
 
 const getHeaders = () => {
   const token = localStorage.getItem('accessToken');

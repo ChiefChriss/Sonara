@@ -1,8 +1,19 @@
 /* ── Hide scrollbar on body (scroll lives in .main-area instead) ──────── */
+/* viewport-fit=cover + env(safe-area-inset-*) need a supporting viewport meta tag */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
 html, body {
   overflow: hidden;
-  height: 100vh;
   margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
@@ -58,15 +69,22 @@ html, body {
 
   .sidebar-main {
     margin-left: 0 !important;
+    min-height: 0 !important;
     height: 100vh !important;
-    padding-bottom: 130px !important;
+    height: 100dvh !important;
+    padding-bottom: calc(130px + env(safe-area-inset-bottom, 0px)) !important;
     overflow-x: hidden !important;
   }
 
+  /* Do not use padding shorthand here — it would reset TopBar safe-area top padding */
   .topbar-header {
     margin-left: 0 !important;
-    padding: 0 16px !important;
-    height: 52px !important;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+    padding-bottom: 0 !important;
+    min-height: calc(52px + env(safe-area-inset-top, 0px)) !important;
+    height: auto !important;
+    box-sizing: border-box !important;
   }
 
   /* ── Consistent content padding ────────────────────────────────────────── */
@@ -191,6 +209,14 @@ html, body {
   }
   .content-comments-outer {
     padding: 16px 14px 160px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  .content-comments-outer > * {
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
   }
 
   /* Comment section */
@@ -198,6 +224,8 @@ html, body {
     padding: 10px !important;
     border-radius: 10px !important;
     margin-bottom: 14px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
   }
   .comment-textarea {
     min-height: 40px !important;
@@ -206,26 +234,44 @@ html, body {
     font-size: 13px !important;
     border-radius: 8px !important;
     resize: none !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
   .comment-composer-meta {
     margin-top: 4px !important;
+    justify-content: space-between !important;
   }
   .comment-composer-row {
     margin-top: 6px !important;
     gap: 8px !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
   }
   .comment-submit-btn {
     padding: 7px 16px !important;
     font-size: 12px !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
   }
   .comment-item {
     padding: 10px !important;
     gap: 8px !important;
     border-radius: 10px !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+  .comment-item > * {
+    min-width: 0 !important;
   }
   .comment-reply-box {
     margin-left: 0 !important;
     max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   /* ══ DAW / Workstation ═════════════════════════════════════════════════ */

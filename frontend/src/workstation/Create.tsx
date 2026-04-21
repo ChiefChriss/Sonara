@@ -7,6 +7,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { apiFetch } from '../utils/api';
 import TrackEditModal from '../components/TrackEditModal';
+import { getApiBaseUrl } from '../utils/apiBase';
 
 interface Project {
   id: number;
@@ -24,6 +25,7 @@ const ArtistHome = () => {
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputId = 'create-upload-track-input';
 
   useEffect(() => {
     document.title = 'Artist Home | Sonara';
@@ -33,7 +35,7 @@ const ArtistHome = () => {
       return;
     }
 
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     const fetchProfile = async () => {
       try {
@@ -128,9 +130,10 @@ const ArtistHome = () => {
           {/* Upload Track */}
           <input
             ref={uploadInputRef}
+            id={uploadInputId}
             type="file"
-            accept="audio/*"
-            style={{ display: 'none' }}
+            accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+            style={styles.hiddenUploadInput}
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) {
@@ -140,9 +143,8 @@ const ArtistHome = () => {
               e.target.value = '';
             }}
           />
-          <button
-            type="button"
-            onClick={() => uploadInputRef.current?.click()}
+          <label
+            htmlFor={uploadInputId}
             className="create-btn"
             style={styles.uploadButton}
           >
@@ -152,7 +154,7 @@ const ArtistHome = () => {
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             Upload Track
-          </button>
+          </label>
 
           {/* My Projects Section */}
           <div style={styles.projectsSection}>
@@ -357,6 +359,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  hiddenUploadInput: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    pointerEvents: 'none',
   },
   projectsSection: {
     width: '100%',

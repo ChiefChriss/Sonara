@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getTrackGradient } from './utils/trackGradient';
 
 interface LibraryItem {
@@ -29,7 +30,7 @@ const LibraryPage = () => {
     const [username, setUsername] = useState('');
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
     const { unreadCount, startPolling } = useNotificationStore();
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     useEffect(() => {
         document.title = 'Library | Sonara';
@@ -81,12 +82,22 @@ const LibraryPage = () => {
             return;
         }
 
+        const queue = items.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            title: entry.title,
+            artist: entry.display_name || entry.username,
+            audioUrl: entry.audio_file,
+            coverImage: entry.cover_image,
+            artistHandle: entry.username,
+        }));
+
         play({
             id: item.id, type: item.type,
             title: item.title, artist: item.display_name || item.username,
             audioUrl: item.audio_file, coverImage: item.cover_image,
             artistHandle: item.username,
-        });
+        }, { queue });
 
         setItems((prev) =>
             prev.map((i) => (i.id === item.id && i.type === item.type) ? { ...i, play_count: i.play_count + 1 } : i)

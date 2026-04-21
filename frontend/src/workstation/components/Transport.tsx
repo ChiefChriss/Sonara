@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import useDawStore from '../state/dawStore';
 import { initAudio, play, pause, stop as engineStop, rewind as engineRewind, updateBpm } from '../engine/TransportSync';
 import * as Icons from './Icons';
+import { PlayGlyph, PauseGlyph } from '../../components/MediaIcons';
 
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const MIN_BPM = 20;
@@ -101,7 +102,7 @@ const Transport: React.FC = () => {
           onClick={handleTogglePlay}
           style={{ ...styles.transportButton, ...styles.playButton }}
         >
-          {isPlaying ? '⏸' : '▶'}
+          {isPlaying ? <PauseGlyph size={18} fill="#fff" /> : <PlayGlyph size={18} fill="#fff" />}
         </button>
         <button onClick={handleStop} style={styles.transportButton}>
           ⏭

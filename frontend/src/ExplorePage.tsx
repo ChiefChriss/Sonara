@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getTrackGradient } from './utils/trackGradient';
 
 interface Track {
@@ -45,7 +46,7 @@ const ExplorePage = () => {
   const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     document.title = 'Explore | Sonara';
@@ -86,12 +87,21 @@ const ExplorePage = () => {
     if (currentTrack?.id === track.id && currentTrack?.type === 'track') {
       togglePlayPause();
     } else {
+      const queue = tracks.map((item) => ({
+        id: item.id,
+        type: 'track' as const,
+        title: item.title,
+        artist: item.display_name || item.username,
+        audioUrl: item.audio_file,
+        coverImage: item.cover_image || item.profile_picture || null,
+        artistHandle: item.username,
+      }));
       play({
         id: track.id, type: 'track',
         title: track.title, artist: track.display_name || track.username,
-        audioUrl: track.audio_file, coverImage: null,
+        audioUrl: track.audio_file, coverImage: track.cover_image || track.profile_picture || null,
         artistHandle: track.username,
-      });
+      }, { queue });
       setTracks((prev) => prev.map((t) => t.id === track.id ? { ...t, play_count: t.play_count + 1 } : t));
     }
   };
@@ -100,12 +110,21 @@ const ExplorePage = () => {
     if (currentTrack?.id === pub.id && currentTrack?.type === 'publication') {
       togglePlayPause();
     } else {
+      const queue = publications.map((item) => ({
+        id: item.id,
+        type: 'publication' as const,
+        title: item.title,
+        artist: item.display_name || item.username,
+        audioUrl: item.audio_file,
+        coverImage: item.cover_image || item.profile_picture || null,
+        artistHandle: item.username,
+      }));
       play({
         id: pub.id, type: 'publication',
         title: pub.title, artist: pub.display_name || pub.username,
         audioUrl: pub.audio_file, coverImage: pub.cover_image,
         artistHandle: pub.username,
-      });
+      }, { queue });
       setPublications((prev) => prev.map((p) => p.id === pub.id ? { ...p, play_count: p.play_count + 1 } : p));
     }
   };

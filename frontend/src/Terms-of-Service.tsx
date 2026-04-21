@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const TermsOfService: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div style={{ backgroundColor: '#0f0f1a', height: '100vh', overflow: 'auto', fontFamily: "'Poppins', sans-serif" }} className="tos-page">
+    <div style={{ backgroundColor: '#0f0f1a', minHeight: '100dvh', height: 'auto', overflow: 'auto', fontFamily: "'Poppins', sans-serif", ...fullBleedSafeArea }} className="tos-page">
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 20px' }}>
         <button
           onClick={() => navigate('/home')}

@@ -67,7 +67,7 @@ const TrackRow: React.FC<TrackRowProps> = ({ trackId, automationOpen, onToggleAu
   const handleInstrumentChange = (presetId: string) => {
     const presetDef = getPreset(presetId);
     if (presetDef?.type === 'sampler') {
-      setSamplerReady(false); // show loading until samples arrive
+      setSamplerLoaded(false); // show loading until samples arrive
     }
     setTrackInstrument(track.id, presetId);
     rebuildTrackSynth({ ...track, instrument: presetId });

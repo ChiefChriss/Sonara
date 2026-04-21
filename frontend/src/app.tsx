@@ -45,7 +45,7 @@ const App = () => {
     location.pathname !== '/create';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <div style={{ flex: 1 }}>
         {shouldShowTopBar && <TopBar />}
         <Routes>

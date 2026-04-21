@@ -4,6 +4,8 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
 import Footer from './components/Footer';
+import { getApiBaseUrl } from './utils/apiBase';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState<string>('');
@@ -22,7 +24,7 @@ const ForgotPassword = () => {
     setMessage('');
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password/`, {
         method: 'POST',
         headers: {
@@ -51,7 +53,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...fullBleedSafeArea }}>
       {/* Background gradient overlay */}
       <div style={styles.backgroundOverlay}></div>
 

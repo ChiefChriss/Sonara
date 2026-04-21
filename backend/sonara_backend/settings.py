@@ -49,6 +49,10 @@ ALLOWED_HOSTS = [
     'backend-production-0d0e6.up.railway.app',
 ]
 
+# In dev, accept requests from any LAN device (e.g. phones, laptops on the same Wi-Fi).
+if ENV == 'dev':
+    ALLOWED_HOSTS += ['0.0.0.0', '*']
+
 CORS_ALLOW_ALL_ORIGINS = False  # For development only
 
 CORS_ALLOWED_ORIGINS = [
@@ -58,6 +62,17 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.sonara.us",
     "https://backend-production-0d0e6.up.railway.app",
 ]
+
+# In dev, allow any origin from the local network (e.g. http://192.168.x.x:5173).
+if ENV == 'dev':
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
+        r"^http://10(\.\d{1,3}){3}(:\d+)?$",
+        r"^http://192\.168(\.\d{1,3}){2}(:\d+)?$",
+        r"^http://172\.(1[6-9]|2\d|3[0-1])(\.\d{1,3}){2}(:\d+)?$",
+    ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://www.sonara.us',

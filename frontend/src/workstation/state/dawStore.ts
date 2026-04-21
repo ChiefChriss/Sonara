@@ -893,9 +893,7 @@ const useDawStore = create<DawStore>((set, get) => ({
       bpm: s.bpm,
       timeSignature: s.timeSignature,
       musicalKey: s.musicalKey,
-      tracks: s.tracks
-        .filter((t) => t.type !== 'audio') // Only save instrument/drum tracks
-        .map((t) => ({
+      tracks: s.tracks.map((t) => ({
           id: t.id,
           name: t.name,
           type: t.type,
@@ -913,6 +911,10 @@ const useDawStore = create<DawStore>((set, get) => ({
             startBeat: c.startBeat,
             duration: c.duration,
             notes: c.notes,
+            audioFileUrl: c.audioFileUrl || null,
+            waveformPeaks: c.waveformPeaks || null,
+            audioOffset: c.audioOffset ?? 0,
+            audioDurationBeats: c.audioDurationBeats ?? null,
           })),
         })),
     };

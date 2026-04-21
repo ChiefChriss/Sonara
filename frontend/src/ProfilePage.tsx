@@ -5,11 +5,13 @@ import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import TrackEditModal from './components/TrackEditModal';
 import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { getUserGradient } from './utils/userGradient';
+import { PlayGlyph, PauseGlyph } from './components/MediaIcons';
 
 interface UserProfile {
   id: number;
@@ -60,7 +62,38 @@ interface RepostListEntry {
   };
 }
 
-const TABS = ['Posts', 'Tracks', 'Playlists', 'Reposts'] as const;
+interface Publication {
+  id: number;
+  title: string;
+  description?: string;
+  audio_file: string;
+  cover_image?: string | null;
+  published_at: string;
+  username: string;
+  display_name?: string;
+  profile_picture?: string | null;
+  like_count?: number;
+  play_count?: number;
+  is_liked?: boolean;
+}
+
+interface LikedItem {
+  id: number;
+  type: 'track' | 'publication';
+  title: string;
+  audio_file: string;
+  cover_image?: string | null;
+  date: string;
+  username: string;
+  display_name?: string;
+}
+
+type PostItem =
+  | { kind: 'track'; timestamp: string; track: Track }
+  | { kind: 'publication'; timestamp: string; publication: Publication }
+  | { kind: 'repost'; timestamp: string; repost: RepostListEntry };
+
+const TABS = ['Posts', 'Tracks', 'Playlists', 'Likes'] as const;
 
 const ProfilePage = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -104,11 +137,15 @@ const ProfilePage = () => {
   const [loggedInUsername, setLoggedInUsername] = useState('');
   const [reposts, setReposts] = useState<RepostListEntry[]>([]);
   const [repostsLoading, setRepostsLoading] = useState(false);
+  const [publications, setPublications] = useState<Publication[]>([]);
+  const [publicationsLoading, setPublicationsLoading] = useState(false);
+  const [likedItems, setLikedItems] = useState<LikedItem[]>([]);
+  const [likesLoading, setLikesLoading] = useState(false);
 
   const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
-  const trackInputRef = useRef<HTMLInputElement>(null);
+  const trackUploadInputId = 'profile-track-upload-input';
   const headerInputRef = useRef<HTMLInputElement>(null);
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const [cropTarget, setCropTarget] = useState<'header' | 'pfp' | null>(null);
@@ -117,7 +154,7 @@ const ProfilePage = () => {
   const { handle } = useParams<{ handle: string }>();
   const urlUsername = handle?.startsWith('@') ? handle.slice(1) : handle;
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   const startEditing = () => {
     setEditBio(user?.bio ?? '');
@@ -177,6 +214,69 @@ const ProfilePage = () => {
       setRepostsLoading(false);
     }
   }, [API_BASE_URL, urlUsername]);
+
+  const fetchPublications = useCallback(async () => {
+    if (!urlUsername) return;
+    setPublicationsLoading(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const headers: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/publications/`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setPublications(Array.isArray(data) ? data : []);
+      } else {
+        setPublications([]);
+      }
+    } catch {
+      setPublications([]);
+    } finally {
+      setPublicationsLoading(false);
+    }
+  }, [API_BASE_URL, urlUsername]);
+
+  const fetchLikes = useCallback(async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken || !isOwnProfile) {
+      setLikedItems([]);
+      return;
+    }
+    setLikesLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/library/');
+      if (!res.ok) throw new Error('Failed to load likes');
+      const data = await res.json();
+      const likedTracks: LikedItem[] = (data.tracks || []).map((track: any) => ({
+        id: track.id,
+        type: 'track' as const,
+        title: track.title,
+        audio_file: track.audio_file,
+        cover_image: track.cover_image || track.profile_picture || null,
+        date: track.uploaded_at,
+        username: track.username,
+        display_name: track.display_name || '',
+      }));
+      const likedPublications: LikedItem[] = (data.publications || []).map((publication: any) => ({
+        id: publication.id,
+        type: 'publication' as const,
+        title: publication.title,
+        audio_file: publication.audio_file,
+        cover_image: publication.cover_image || publication.profile_picture || null,
+        date: publication.published_at,
+        username: publication.username,
+        display_name: publication.display_name || '',
+      }));
+      setLikedItems(
+        [...likedTracks, ...likedPublications].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        )
+      );
+    } catch {
+      setLikedItems([]);
+    } finally {
+      setLikesLoading(false);
+    }
+  }, [isOwnProfile]);
 
   const deleteTrack = async (trackId: number) => {
     const accessToken = localStorage.getItem('accessToken');
@@ -256,6 +356,22 @@ const ProfilePage = () => {
       audioUrl: t.audio_file,
       coverImage: t.cover_image || t.profile_picture || null,
       artistHandle: t.username,
+    });
+  };
+
+  const playPublication = (publication: Publication) => {
+    if (currentTrack?.id === publication.id && currentTrack?.type === 'publication') {
+      togglePlayPause();
+      return;
+    }
+    play({
+      id: publication.id,
+      type: 'publication',
+      title: publication.title,
+      artist: publication.display_name || publication.username,
+      audioUrl: publication.audio_file,
+      coverImage: publication.cover_image || publication.profile_picture || null,
+      artistHandle: publication.username,
     });
   };
 
@@ -411,8 +527,29 @@ const ProfilePage = () => {
   }, [fetchTracks, isOwnProfile]);
 
   useEffect(() => {
-    if (activeTab === 'Reposts') fetchReposts();
-  }, [activeTab, fetchReposts]);
+    if (activeTab === 'Posts') {
+      fetchReposts();
+      fetchPublications();
+    }
+  }, [activeTab, fetchReposts, fetchPublications]);
+
+  useEffect(() => {
+    if (activeTab === 'Likes') fetchLikes();
+  }, [activeTab, fetchLikes]);
+
+  const postItems = useMemo<PostItem[]>(
+    () =>
+      [
+        ...tracks.map((track) => ({ kind: 'track' as const, timestamp: track.uploaded_at, track })),
+        ...publications.map((publication) => ({
+          kind: 'publication' as const,
+          timestamp: publication.published_at,
+          publication,
+        })),
+        ...reposts.map((repost) => ({ kind: 'repost' as const, timestamp: repost.reposted_at, repost })),
+      ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [tracks, publications, reposts]
+  );
 
   const headerPreviewUrl = useMemo(
     () => (headerFile ? URL.createObjectURL(headerFile) : null),
@@ -859,16 +996,162 @@ const ProfilePage = () => {
 
         {/* Tab content */}
         <div className="profile-tab-content" style={styles.tabContent}>
-          {activeTab === 'Tracks' ? (
+          {activeTab === 'Posts' ? (
+            <div>
+              {tracksLoading || repostsLoading || publicationsLoading ? (
+                <p style={styles.comingSoon}>Loading posts...</p>
+              ) : postItems.length === 0 ? (
+                <p style={styles.comingSoon}>
+                  {isOwnProfile ? 'Share tracks or repost something you love - your posts will show up here.' : 'No posts yet.'}
+                </p>
+              ) : (
+                <div style={styles.trackList}>
+                  {postItems.map((item) => {
+                    if (item.kind === 'repost') {
+                      const entry = item.repost;
+                      return (
+                        <div key={`repost-${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                          <div style={styles.repostCardMeta}>
+                            <span style={styles.repostBadge}>
+                              <RepostIcon size={14} active />
+                              <span style={{ marginLeft: 6 }}>Reposted</span>
+                            </span>
+                            <span style={styles.repostDate}>
+                              {new Date(entry.reposted_at).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          </div>
+                          <div style={styles.trackCard}>
+                            <button
+                              type="button"
+                              onClick={() => playRepostedTrack(entry.track)}
+                              style={styles.playBtn}
+                              aria-label={
+                                currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                                  ? 'Pause'
+                                  : 'Play'
+                              }
+                            >
+                              {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying ? (
+                                <PauseGlyph size={16} fill="#fff" />
+                              ) : (
+                                <PlayGlyph size={16} fill="#fff" />
+                              )}
+                            </button>
+                            <div style={styles.trackInfo}>
+                              <span style={styles.trackTitle}>{entry.track.title}</span>
+                              <button
+                                type="button"
+                                style={styles.repostOriginalArtist}
+                                onClick={() => navigate(`/@${entry.track.username}`)}
+                              >
+                                {entry.track.display_name || entry.track.username}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/track/${entry.track.id}`)}
+                              style={styles.repostOpenBtn}
+                            >
+                              Open
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (item.kind === 'publication') {
+                      const publication = item.publication;
+                      return (
+                        <div key={`publication-${publication.id}`} style={styles.repostCard}>
+                          <div style={styles.repostCardMeta}>
+                            <span style={styles.repostBadge}>Post</span>
+                            <span style={styles.repostDate}>{new Date(publication.published_at).toLocaleDateString()}</span>
+                          </div>
+                          <div style={styles.trackCard}>
+                            <button
+                              type="button"
+                              onClick={() => playPublication(publication)}
+                              style={styles.playBtn}
+                              aria-label={
+                                currentTrack?.id === publication.id && currentTrack?.type === 'publication' && isPlaying
+                                  ? 'Pause'
+                                  : 'Play'
+                              }
+                            >
+                              {currentTrack?.id === publication.id && currentTrack?.type === 'publication' && isPlaying ? (
+                                <PauseGlyph size={16} fill="#fff" />
+                              ) : (
+                                <PlayGlyph size={16} fill="#fff" />
+                              )}
+                            </button>
+                            <div style={styles.trackInfo}>
+                              <span style={styles.trackTitle}>{publication.title}</span>
+                              <span style={styles.trackDate}>Published song</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/publication/${publication.id}`)}
+                              style={styles.repostOpenBtn}
+                            >
+                              Open
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const track = item.track;
+                    return (
+                      <div key={`track-${track.id}`} style={styles.repostCard}>
+                        <div style={styles.repostCardMeta}>
+                          <span style={styles.repostBadge}>Track</span>
+                          <span style={styles.repostDate}>{new Date(track.uploaded_at).toLocaleDateString()}</span>
+                        </div>
+                        <div style={styles.trackCard}>
+                          <button
+                            type="button"
+                            onClick={() => togglePlay(track)}
+                            style={styles.playBtn}
+                            aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
+                          >
+                            {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? (
+                              <PauseGlyph size={16} fill="#fff" />
+                            ) : (
+                              <PlayGlyph size={16} fill="#fff" />
+                            )}
+                          </button>
+                          <div style={styles.trackInfo}>
+                            <span style={styles.trackTitle}>{track.title}</span>
+                            <span style={styles.trackDate}>Uploaded track</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/track/${track.id}`)}
+                            style={styles.repostOpenBtn}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'Tracks' ? (
             <div>
               {isOwnProfile && (
                 <div style={styles.trackUploadSection}>
                   <h3 style={styles.trackSectionTitle}>Upload a track</h3>
                   <div style={styles.trackUploadForm}>
                     <input
-                      ref={trackInputRef}
+                      id={trackUploadInputId}
                       type="file"
-                      accept="audio/*"
+                      accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f) {
@@ -879,15 +1162,14 @@ const ProfilePage = () => {
                       }}
                       style={styles.hiddenFileInput}
                     />
-                    <button
-                      type="button"
-                      onClick={() => trackInputRef.current?.click()}
+                    <label
+                      htmlFor={trackUploadInputId}
                       className="profile-upload-card"
                       style={styles.uploadCard}
                     >
                       <span style={styles.uploadIcon}>♫</span>
                       <span style={styles.uploadText}>{'Choose audio file'}</span>
-                    </button>
+                    </label>
                   </div>
                 </div>
               )}
@@ -906,7 +1188,11 @@ const ProfilePage = () => {
                         style={styles.playBtn}
                         aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
                       >
-                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? '⏸' : '▶'}
+                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? (
+                          <PauseGlyph size={16} fill="#fff" />
+                        ) : (
+                          <PlayGlyph size={16} fill="#fff" />
+                        )}
                       </button>
                       <div style={styles.trackInfo}>
                         <span style={styles.trackTitle}>{track.title}</span>
@@ -947,59 +1233,66 @@ const ProfilePage = () => {
                 </div>
               )}
             </div>
-          ) : activeTab === 'Reposts' ? (
+          ) : activeTab === 'Likes' ? (
             <div>
-              {repostsLoading ? (
-                <p style={styles.comingSoon}>Loading reposts…</p>
-              ) : reposts.length === 0 ? (
-                <p style={styles.comingSoon}>
-                  {isOwnProfile ? 'Repost tracks you love — they’ll show up here.' : 'No reposts yet.'}
-                </p>
+              {!isOwnProfile ? (
+                <p style={styles.comingSoon}>Likes are only visible on your own profile.</p>
+              ) : likesLoading ? (
+                <p style={styles.comingSoon}>Loading likes...</p>
+              ) : likedItems.length === 0 ? (
+                <p style={styles.comingSoon}>Tracks and songs you like will show up here.</p>
               ) : (
                 <div style={styles.trackList}>
-                  {reposts.map((entry) => (
-                    <div key={`${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                  {likedItems.map((item) => (
+                    <div key={`${item.type}-${item.id}`} style={styles.repostCard}>
                       <div style={styles.repostCardMeta}>
-                        <span style={styles.repostBadge}>
-                            <RepostIcon size={14} active />
-                            <span style={{ marginLeft: 6 }}>Reposted</span>
-                        </span>
-                        <span style={styles.repostDate}>
-                          {new Date(entry.reposted_at).toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </span>
+                        <span style={styles.repostBadge}>Liked</span>
+                        <span style={styles.repostDate}>{new Date(item.date).toLocaleDateString()}</span>
                       </div>
                       <div style={styles.trackCard}>
                         <button
                           type="button"
-                          onClick={() => playRepostedTrack(entry.track)}
+                          onClick={() => {
+                            if (currentTrack?.id === item.id && currentTrack?.type === item.type) {
+                              togglePlayPause();
+                              return;
+                            }
+                            play({
+                              id: item.id,
+                              type: item.type,
+                              title: item.title,
+                              artist: item.display_name || item.username,
+                              audioUrl: item.audio_file,
+                              coverImage: item.cover_image || null,
+                              artistHandle: item.username,
+                            });
+                          }}
                           style={styles.playBtn}
                           aria-label={
-                            currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
+                            currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying
                               ? 'Pause'
                               : 'Play'
                           }
                         >
-                          {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
-                            ? '⏸'
-                            : '▶'}
+                          {currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying ? (
+                            <PauseGlyph size={16} fill="#fff" />
+                          ) : (
+                            <PlayGlyph size={16} fill="#fff" />
+                          )}
                         </button>
                         <div style={styles.trackInfo}>
-                          <span style={styles.trackTitle}>{entry.track.title}</span>
+                          <span style={styles.trackTitle}>{item.title}</span>
                           <button
                             type="button"
                             style={styles.repostOriginalArtist}
-                            onClick={() => navigate(`/@${entry.track.username}`)}
+                            onClick={() => navigate(`/@${item.username}`)}
                           >
-                            {entry.track.display_name || entry.track.username}
+                            {item.display_name || item.username}
                           </button>
                         </div>
                         <button
                           type="button"
-                          onClick={() => navigate(`/track/${entry.track.id}`)}
+                          onClick={() => navigate(`/${item.type}/${item.id}`)}
                           style={styles.repostOpenBtn}
                         >
                           Open
@@ -1011,7 +1304,7 @@ const ProfilePage = () => {
               )}
             </div>
           ) : (
-            <p style={styles.comingSoon}>{activeTab} — Coming soon</p>
+            <p style={styles.comingSoon}>{activeTab} - Coming soon</p>
           )}
         </div>
       </div>
@@ -1115,7 +1408,8 @@ const ProfilePage = () => {
 const styles: Record<string, React.CSSProperties> = {
   pageWrapper: {
     display: 'flex',
-    minHeight: '100vh',
+    minHeight: '100dvh',
+    width: '100%',
     background: '#0f0f1a',
     fontFamily: "'Poppins', sans-serif",
     color: '#ffffff',
@@ -1216,33 +1510,43 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    flex: 1,
+    width: '100%',
+    minHeight: '100dvh',
     gap: '12px',
+    padding: '24px',
     position: 'relative',
     zIndex: 1,
+    textAlign: 'center' as const,
   },
   spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid rgba(255,255,255,0.2)',
+    width: '44px',
+    height: '44px',
+    border: '3px solid rgba(167,139,250,0.15)',
     borderTopColor: '#a78bfa',
+    borderRightColor: '#ec4899',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: '14px',
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: '15px',
+    fontWeight: 500,
+    letterSpacing: '0.2px',
   },
   errorWrap: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    flex: 1,
+    width: '100%',
+    minHeight: '100dvh',
     gap: '16px',
     padding: '24px',
     position: 'relative',
     zIndex: 1,
+    textAlign: 'center' as const,
   },
   errorText: {
     color: '#ff6b6b',
@@ -2094,3 +2398,4 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default ProfilePage;
+

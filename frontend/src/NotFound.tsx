@@ -4,6 +4,7 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
 import Footer from './components/Footer';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const NotFound = () => {
   useEffect(() => {
@@ -11,7 +12,7 @@ const NotFound = () => {
   }, []);
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...fullBleedSafeArea }}>
       {/* Background gradient overlay */}
       <div style={styles.backgroundOverlay}></div>
 

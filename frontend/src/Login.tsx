@@ -5,6 +5,8 @@ import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
 import LogoTransition from './LogoTransition';
 import Footer from './components/Footer';
+import { getApiBaseUrl } from './utils/apiBase';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const Login = () => {
 
@@ -22,7 +24,7 @@ const Login = () => {
   const handleLogin = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await fetch(`${API_BASE_URL}/api/auth/login/`, {
         method: 'POST',
         headers: {
@@ -69,7 +71,7 @@ const Login = () => {
   }
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...fullBleedSafeArea }}>
       {/* Background gradient overlay */}
       <div style={styles.backgroundOverlay}></div>
 

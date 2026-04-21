@@ -7,6 +7,9 @@ export default defineConfig({
   build: {
     outDir: "dist",
   },
+  server: {
+    host: true,
+  },
   preview: {
     allowedHosts: [".up.railway.app", "www.sonara.us", "sonara.us"],
   },

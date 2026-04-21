@@ -13,6 +13,7 @@ import HistoryPanel from './components/HistoryPanel';
 import MixerPanel from './components/MixerPanel';
 import MobileDaw from './components/MobileDaw';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { getApiBaseUrl } from '../utils/apiBase';
 
 const TRACK_LIST_WIDTH = 280;
 const AUTOMATION_LANE_HEIGHT = 60;
@@ -97,7 +98,7 @@ const DAW = () => {
     if (libraryItems.length > 0) return;
     setLibraryLoading(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+      const API_BASE = getApiBaseUrl();
       const token = localStorage.getItem('accessToken');
       const res = await fetch(`${API_BASE}/api/auth/purchases/`, {
         headers: { Authorization: `Bearer ${token}` },

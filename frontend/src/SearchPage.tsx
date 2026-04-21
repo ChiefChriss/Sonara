@@ -5,6 +5,8 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
 import { getUserGradient } from './utils/userGradient';
+import { PlayGlyph, PauseGlyph } from './components/MediaIcons';
+import { getApiBaseUrl } from './utils/apiBase';
 
 interface SearchUser {
   id: number;
@@ -53,7 +55,7 @@ const SearchPage = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -265,7 +267,7 @@ const SearchPage = () => {
                         onClick={() => togglePlay(t.audio_file, key)}
                         style={styles.playBtn}
                       >
-                        {playingId === key ? '⏸' : '▶'}
+                        {playingId === key ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                       </button>
                       <div style={styles.resultInfo}>
                         <span style={styles.resultTitle}>{t.title}</span>
@@ -302,7 +304,7 @@ const SearchPage = () => {
                         onClick={() => togglePlay(p.audio_file, key)}
                         style={styles.playBtn}
                       >
-                        {playingId === key ? '⏸' : '▶'}
+                        {playingId === key ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                       </button>
                       <div style={styles.resultInfo}>
                         <span style={styles.resultTitle}>{p.title}</span>

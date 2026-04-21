@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { useNotificationStore } from './stores/notificationStore';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
@@ -10,6 +11,7 @@ import TrackPageWaveform from './components/TrackPageWaveform';
 import { getTrackGradient } from './utils/trackGradient';
 import { getUserGradient } from './utils/userGradient';
 import Footer from './components/Footer';
+import { PlayGlyph, PauseGlyph, PlayPauseLabel } from './components/MediaIcons';
 
 // ── Interfaces (Chris) ──────────────────────────────────────────────────────
 
@@ -67,7 +69,7 @@ const ListenerHome = () => {
   // Chris: player store
   const globalPlayerState = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   // ── Auth + data fetch (Chris) ─────────────────────────────────────────────
 
@@ -183,7 +185,7 @@ const ListenerHome = () => {
             style={{ ...styles.cardPlayBtn, opacity: playing ? 1 : undefined }}
             onClick={(e) => { e.stopPropagation(); playing ? globalPlayerState.togglePlayPause() : playTrack(item); }}
           >
-            {playing ? '⏸' : '▶'}
+            {playing ? <PauseGlyph size={15} fill="#fff" /> : <PlayGlyph size={15} fill="#fff" />}
           </button>
           <button
             type="button"
@@ -209,7 +211,10 @@ const ListenerHome = () => {
             {item.display_name || item.username}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <p style={styles.cardPlays}>▶ {formatCount(item.play_count)}</p>
+            <p style={{ ...styles.cardPlays, display: 'flex', alignItems: 'center', gap: 4, margin: 0 }}>
+              <PlayGlyph size={10} fill="rgba(255,255,255,0.4)" />
+              {formatCount(item.play_count)}
+            </p>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
               {formatCount(item.like_count)}
@@ -258,7 +263,7 @@ const ListenerHome = () => {
               style={{ ...styles.rowPlay, opacity: playing ? 1 : undefined }}
               onClick={() => (playing ? globalPlayerState.togglePlayPause() : playTrack(t))}
             >
-              {playing ? '⏸' : '▶'}
+              {playing ? <PauseGlyph size={18} fill="#a78bfa" /> : <PlayGlyph size={18} fill="#a78bfa" />}
             </button>
             {t.profile_picture && (
               <img
@@ -298,7 +303,10 @@ const ListenerHome = () => {
               />
             ))}
           </div>
-          <span style={styles.rowCount}>▶ {formatCount(t.play_count)}</span>
+          <span style={{ ...styles.rowCount, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+            <PlayGlyph size={11} fill="rgba(255,255,255,0.35)" />
+            {formatCount(t.play_count)}
+          </span>
         </div>
       </div>
     );
@@ -425,9 +433,12 @@ const ListenerHome = () => {
                         : playTrack(allTracks[0])
                     }
                   >
-                    {isPlaying(allTracks[0]) ? '⏸ Pause' : '▶ Play'}
+                    <PlayPauseLabel playing={isPlaying(allTracks[0])} />
                   </button>
-                  <span style={styles.featuredPlays}>▶ {formatCount(allTracks[0].play_count)}</span>
+                  <span style={{ ...styles.featuredPlays, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <PlayGlyph size={12} fill="rgba(255,255,255,0.45)" />
+                    {formatCount(allTracks[0].play_count)}
+                  </span>
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,255,255,0.4)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                     {formatCount(allTracks[0].like_count)}
@@ -971,12 +982,15 @@ const styles: Record<string, React.CSSProperties> = {
     width: 190,
     flexShrink: 0,
     cursor: 'pointer',
+    paddingTop: 2,
+    minWidth: 0,
   },
   rowTitle: {
     display: 'block',
     fontSize: 14,
     fontWeight: 600,
     color: '#fff',
+    lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -986,6 +1000,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     fontSize: 12,
     color: '#ec4899',
+    lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',

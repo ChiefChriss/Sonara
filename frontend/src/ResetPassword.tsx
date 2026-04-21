@@ -4,6 +4,8 @@ import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
 import Footer from './components/Footer';
+import { getApiBaseUrl } from './utils/apiBase';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const ResetPassword = () => {
   const [password, setPassword] = useState<string>('');
@@ -44,7 +46,7 @@ const ResetPassword = () => {
     setIsSubmitting(true);
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await fetch(`${API_BASE_URL}/api/auth/reset-password/`, {
         method: 'POST',
         headers: {
@@ -81,7 +83,7 @@ const ResetPassword = () => {
   // Show error if no token/uid in URL
   if (!uid || !token) {
     return (
-      <div style={styles.container}>
+      <div style={{ ...styles.container, ...fullBleedSafeArea }}>
         <div style={styles.backgroundOverlay}></div>
         <img src={waveLeft} alt="" style={styles.waveLeft} />
         <img src={waveRight} alt="" style={styles.waveRight} />
@@ -96,7 +98,7 @@ const ResetPassword = () => {
   }
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...fullBleedSafeArea }}>
       {/* Background gradient overlay */}
       <div style={styles.backgroundOverlay}></div>
 

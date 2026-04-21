@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import TrackPageWaveform from './components/TrackPageWaveform';
@@ -93,7 +94,7 @@ const ContentPage = () => {
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
     const { unreadCount, startPolling, fetchUnreadCount } = useNotificationStore();
 
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     const [comments, setComments] = useState<TrackComment[]>([]);
     const [commentsLoading, setCommentsLoading] = useState(true);
