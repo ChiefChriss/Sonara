@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import TrackPageWaveform from './components/TrackPageWaveform';
@@ -93,7 +94,7 @@ const ContentPage = () => {
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
     const { unreadCount, startPolling, fetchUnreadCount } = useNotificationStore();
 
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     const [comments, setComments] = useState<TrackComment[]>([]);
     const [commentsLoading, setCommentsLoading] = useState(true);
@@ -194,7 +195,7 @@ const ContentPage = () => {
     }, [type, id, API_BASE_URL]);
 
     const sidebar = (
-        <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+        <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
             <style>{`.sidebar-link:hover { background: rgba(167,139,250,0.1); color: #fff !important; }`}</style>
             <div style={styles.sidebarTop}>
                 <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -210,9 +211,9 @@ const ContentPage = () => {
                 <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
                 </Link>
-                <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+                <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
                     <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-                </div>
+                </Link>
                 <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
                     <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
                     {unreadCount > 0 && (
@@ -230,6 +231,7 @@ const ContentPage = () => {
                 <Link to="/create" style={styles.uploadBtn}>
                     + Upload Track
                 </Link>
+                <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
             </div>
         </aside>
     );
@@ -238,7 +240,7 @@ const ContentPage = () => {
         return (
             <div style={styles.pageWrapper}>
                 {sidebar}
-                <div style={styles.mainArea}>
+                <div className="sidebar-main" style={styles.mainArea}>
                     <div style={styles.loadingWrap}>
                         <div style={styles.spinner} />
                         <span style={styles.loadingText}>Loading...</span>
@@ -252,7 +254,7 @@ const ContentPage = () => {
         return (
             <div style={styles.pageWrapper}>
                 {sidebar}
-                <div style={styles.mainArea}>
+                <div className="sidebar-main" style={styles.mainArea}>
                     <div style={styles.loadingWrap}>
                         <h2>Track not found</h2>
                         <button onClick={() => navigate(-1)} style={styles.backBtn}>Go Back</button>
@@ -475,7 +477,7 @@ const ContentPage = () => {
         const threadParent = opts.threadParent;
         return (
             <div style={opts.isReply ? styles.commentReplyBlock : undefined}>
-                <div style={{ ...styles.commentItem, ...(opts.isReply ? styles.commentItemReply : {}) }}>
+                <div className="comment-item" style={{ ...styles.commentItem, ...(opts.isReply ? styles.commentItemReply : {}) }}>
                     <div
                         style={styles.commentAvatar}
                         onClick={() => navigate(`/@${c.username}`)}
@@ -572,7 +574,7 @@ const ContentPage = () => {
                     </div>
                 </div>
                 {!opts.isReply && replyingToId === c.id && token && (
-                    <div style={styles.replyInlineBox}>
+                    <div className="comment-reply-box" style={styles.replyInlineBox}>
                         {replyError && <span style={styles.replyInlineError}>{replyError}</span>}
                         <textarea
                             style={styles.replyTextarea}
@@ -638,17 +640,17 @@ const ContentPage = () => {
     return (
         <div style={styles.pageWrapper}>
             {sidebar}
-            <div style={styles.mainArea}>
+            <div className="sidebar-main" style={styles.mainArea}>
                 {/* Hero Banner Area */}
-                <div style={styles.heroBox}>
+                <div className="content-hero-box" style={styles.heroBox}>
                     {coverUrl && (
                         <div style={{ ...styles.heroBgBlur, backgroundImage: `url(${coverUrl})` }} />
                     )}
 
-                    <div style={styles.heroOuter}>
-                        <div style={styles.heroCard}>
-                            <div style={styles.heroTopRow}>
-                                <div style={styles.coverWrapper}>
+                    <div className="content-hero-outer" style={styles.heroOuter}>
+                        <div className="content-hero-card" style={styles.heroCard}>
+                            <div className="content-hero-top" style={styles.heroTopRow}>
+                                <div className="content-cover-wrap" style={styles.coverWrapper}>
                                     {coverUrl ? (
                                         <img src={coverUrl} alt="Cover" style={styles.coverImg} />
                                     ) : (
@@ -658,8 +660,8 @@ const ContentPage = () => {
 
                                 <div style={styles.infoWrapper}>
                                     <span style={styles.typeBadge}>{type === 'track' ? 'Track' : 'Publication'}</span>
-                                    <div style={styles.titleRow}>
-                                        <button type="button" onClick={handlePlayToggle} style={styles.bigPlayBtn}>
+                                    <div className="content-title-row" style={styles.titleRow}>
+                                        <button className="content-play-btn" type="button" onClick={handlePlayToggle} style={styles.bigPlayBtn}>
                                             {isThisItemPlaying && isPlaying ? (
                                                 <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
                                             ) : (
@@ -667,14 +669,14 @@ const ContentPage = () => {
                                             )}
                                         </button>
                                         <div style={styles.textStack}>
-                                            <h1 style={styles.heroTitle}>{data.title}</h1>
-                                            <h2 style={styles.heroArtist} onClick={() => navigate(`/@${data.username}`)}>
+                                            <h1 className="content-hero-title" style={styles.heroTitle}>{data.title}</h1>
+                                            <h2 className="content-hero-artist" style={styles.heroArtist} onClick={() => navigate(`/@${data.username}`)}>
                                                 {data.display_name || data.username}
                                             </h2>
                                         </div>
                                     </div>
 
-                                    <div style={styles.statsRow}>
+                                    <div className="content-stats-row" style={styles.statsRow}>
                                         <button
                                             type="button"
                                             onClick={handleLikeToggle}
@@ -714,7 +716,7 @@ const ContentPage = () => {
                                 </div>
                             </div>
 
-                            <div style={styles.heroWaveBand}>
+                            <div className="content-wave-band" style={styles.heroWaveBand}>
                                 <TrackPageWaveform
                                     audioUrl={data.audio_file}
                                     isActive={isThisItemPlaying}
@@ -730,31 +732,33 @@ const ContentPage = () => {
                     </div>
                 </div>
 
-                <div style={styles.commentsOuter}>
+                <div className="content-comments-outer" style={styles.commentsOuter}>
                     <div style={styles.commentsInner}>
                         <h2 style={styles.commentsHeading}>
                             Comments <span style={styles.commentsCount}>{comments.length}</span>
                         </h2>
 
-                        <div style={styles.commentComposer}>
+                        <div className="comment-composer" style={styles.commentComposer}>
                             <textarea
+                                className="comment-textarea"
                                 style={styles.commentTextarea}
                                 placeholder={localStorage.getItem('accessToken') ? 'Write a comment…' : 'Log in to comment'}
                                 value={commentBody}
                                 onChange={(e) => setCommentBody(e.target.value.slice(0, COMMENT_MAX))}
                                 maxLength={COMMENT_MAX}
-                                rows={3}
+                                rows={2}
                                 disabled={!localStorage.getItem('accessToken')}
                             />
-                            <div style={styles.commentComposerMeta}>
+                            <div className="comment-composer-meta" style={styles.commentComposerMeta}>
                                 <span style={styles.commentCharCount}>
                                     {commentBody.length}/{COMMENT_MAX}
                                 </span>
                             </div>
-                            <div style={styles.commentComposerRow}>
+                            <div className="comment-composer-row" style={styles.commentComposerRow}>
                                 {commentError && <span style={styles.commentError}>{commentError}</span>}
                                 <button
                                     type="button"
+                                    className="comment-submit-btn"
                                     style={{
                                         ...styles.commentSubmit,
                                         opacity: commentPosting || !commentBody.trim() ? 0.5 : 1,
@@ -822,6 +826,7 @@ const styles: Record<string, React.CSSProperties> = {
     sidebarLink: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', cursor: 'pointer' },
     sidebarIcon: { fontSize: 18, width: 24, textAlign: 'center' },
     sidebarBottom: { padding: '16px 12px 24px', borderTop: '1px solid rgba(167,139,250,0.1)' },
+    tosLink: { display: 'block', textAlign: 'center' as const, marginTop: '10px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.3)', textDecoration: 'none' },
     uploadBtn: { display: 'block', textAlign: 'center', padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
     mainArea: { flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', marginLeft: 240, height: 'calc(100vh - 64px)' },
 
@@ -850,6 +855,7 @@ const styles: Record<string, React.CSSProperties> = {
         overflow: 'hidden',
         borderBottom: '1px solid rgba(167,139,250,0.12)',
         padding: '32px 24px 40px',
+        boxSizing: 'border-box' as const,
     },
     heroBgBlur: {
         position: 'absolute',
@@ -874,6 +880,7 @@ const styles: Record<string, React.CSSProperties> = {
         border: '1px solid rgba(167, 139, 250, 0.18)',
         boxShadow: '0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)',
         backdropFilter: 'blur(12px)',
+        boxSizing: 'border-box' as const,
     },
     heroTopRow: {
         display: 'flex',

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import sonaraLogo from './assets/sonara_logo.svg';
 import waveLeft from './assets/wave-left.svg';
 import waveRight from './assets/wave-right.svg';
+import Footer from './components/Footer';
+import { fullBleedSafeArea } from './utils/safeArea';
 
 const NotFound = () => {
   useEffect(() => {
@@ -10,7 +12,7 @@ const NotFound = () => {
   }, []);
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...fullBleedSafeArea }}>
       {/* Background gradient overlay */}
       <div style={styles.backgroundOverlay}></div>
 
@@ -35,15 +37,19 @@ const NotFound = () => {
         </Link>
       </div>
 
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 1 }}>
+        <Footer />
+      </div>
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');
-        
+
         * {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
         }
-        
+
         a:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 30px rgba(0, 212, 255, 0.5);

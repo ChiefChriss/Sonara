@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getTrackGradient } from './utils/trackGradient';
 
 interface LibraryItem {
@@ -29,7 +30,7 @@ const LibraryPage = () => {
     const [username, setUsername] = useState('');
     const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
     const { unreadCount, startPolling } = useNotificationStore();
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     useEffect(() => {
         document.title = 'Library | Sonara';
@@ -81,12 +82,22 @@ const LibraryPage = () => {
             return;
         }
 
+        const queue = items.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            title: entry.title,
+            artist: entry.display_name || entry.username,
+            audioUrl: entry.audio_file,
+            coverImage: entry.cover_image,
+            artistHandle: entry.username,
+        }));
+
         play({
             id: item.id, type: item.type,
             title: item.title, artist: item.display_name || item.username,
             audioUrl: item.audio_file, coverImage: item.cover_image,
             artistHandle: item.username,
-        });
+        }, { queue });
 
         setItems((prev) =>
             prev.map((i) => (i.id === item.id && i.type === item.type) ? { ...i, play_count: i.play_count + 1 } : i)
@@ -131,7 +142,7 @@ const LibraryPage = () => {
       `}</style>
 
             {/* ── Sidebar ── */}
-            <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+            <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
                 <div style={styles.sidebarTop}>
                     <Link to="/home">
                         <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -164,12 +175,13 @@ const LibraryPage = () => {
                 </div>
                 <div style={styles.sidebarBottom}>
                     <Link to="/upload" style={styles.uploadBtn}>Upload Track</Link>
+                    <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
                 </div>
             </nav>
 
             {/* ── Main Area ── */}
-            <div style={styles.mainArea}>
-                <div style={styles.main}>
+            <div className="sidebar-main" style={styles.mainArea}>
+                <div className="library-main" style={styles.main}>
                     <h1 style={styles.pageTitle}>Your Library</h1>
 
                     {loading ? (
@@ -290,6 +302,7 @@ const styles: Record<string, React.CSSProperties> = {
     sidebarLink: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', cursor: 'pointer' },
     sidebarIcon: { fontSize: 18, width: 24, textAlign: 'center' as const },
     sidebarBottom: { padding: '16px 12px 24px', borderTop: '1px solid rgba(167,139,250,0.1)' },
+    tosLink: { display: 'block', textAlign: 'center' as const, marginTop: '10px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.3)', textDecoration: 'none' },
     uploadBtn: { display: 'block', textAlign: 'center' as const, padding: '12px 20px', borderRadius: 9999, background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: '0 4px 20px rgba(167,139,250,0.3)', transition: 'all 0.2s', cursor: 'pointer', border: 'none', fontFamily: "'Poppins', sans-serif" },
 
     // ── Main area ──

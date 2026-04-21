@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiFetch } from '../utils/api';
 import { getUserGradient } from '../utils/userGradient';
+import { PlayGlyph } from './MediaIcons';
+import { getApiBaseUrl } from '../utils/apiBase';
 // getTrackGradient available if track cover placeholders are added to search results
 // import { getTrackGradient } from '../utils/trackGradient';
 
@@ -29,7 +31,7 @@ interface SearchResult {
 
 const TopBar = () => {
   const navigate = useNavigate();
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   // Profile state
   const [username, setUsername] = useState('');
@@ -117,6 +119,18 @@ const TopBar = () => {
   // ── Play track from search results ────────────────────────────────────────
 
   const playTrack = (item: SearchResult) => {
+    const queue = searchResults
+      .filter((result) => result.audio_file)
+      .map((result) => ({
+        id: result.id,
+        title: result.title,
+        artist: result.username,
+        artistHandle: result.username,
+        audioUrl: result.audio_file || '',
+        coverImage: result.cover_image || result.profile_picture || null,
+        type: result.type,
+      }));
+
     usePlayerStore.getState().play({
       id: item.id,
       title: item.title,
@@ -125,7 +139,7 @@ const TopBar = () => {
       audioUrl: item.audio_file || '',
       coverImage: item.cover_image || item.profile_picture || null,
       type: item.type,
-    });
+    }, { queue });
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
@@ -141,8 +155,8 @@ const TopBar = () => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <header style={styles.topBar}>
-      <div ref={searchWrapRef} style={styles.searchWrap}>
+    <header className="topbar-header" style={styles.topBar}>
+      <div ref={searchWrapRef} className="search-wrap-responsive" style={styles.searchWrap}>
         <input
           type="text"
           placeholder="Search tracks or artists..."
@@ -187,7 +201,9 @@ const TopBar = () => {
                 <div style={styles.dropLabel}>Tracks & Posts</div>
                 {searchResults.map((r) => (
                   <div key={`r-${r.type}-${r.id}`} style={styles.dropRow}>
-                    <button style={styles.dropPlayBtn} onClick={() => playTrack(r)}>▶</button>
+                    <button type="button" style={styles.dropPlayBtn} onClick={() => playTrack(r)} aria-label="Play">
+                      <PlayGlyph size={14} fill="#fff" />
+                    </button>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={styles.dropName}>{r.title}</div>
                       <div
@@ -264,6 +280,15 @@ const TopBar = () => {
             </div>
             <div
               style={styles.profileDropdownItem}
+              onClick={() => { setProfileMenuOpen(false); navigate('/revenue'); }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(167,139,250,0.15)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              Revenue
+            </div>
+            <div
+              style={styles.profileDropdownItem}
               onClick={() => { setProfileMenuOpen(false); /* settings page placeholder */ }}
               onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(167,139,250,0.15)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
@@ -295,9 +320,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 64,
+    minHeight: 'calc(64px + env(safe-area-inset-top, 0px))',
     flexShrink: 0,
-    padding: '0 32px',
+    paddingLeft: 32,
+    paddingRight: 32,
+    paddingTop: 'env(safe-area-inset-top, 0px)',
+    paddingBottom: 0,
     background: 'rgba(19,19,31,0.92)',
     backdropFilter: 'blur(12px)',
     borderBottom: '1px solid rgba(167,139,250,0.12)',

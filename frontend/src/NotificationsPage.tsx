@@ -6,6 +6,7 @@ import RepostIcon from './components/RepostIcon';
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getUserGradient } from './utils/userGradient';
 
 interface Notification {
@@ -20,6 +21,7 @@ interface Notification {
   track_id: number | null;
   publication_title: string | null;
   publication_id: number | null;
+  amount: string | null;
 }
 
 type TabFilter = 'all' | 'likes' | 'follows' | 'comments';
@@ -34,7 +36,7 @@ const NotificationsPage = () => {
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const { clearCount, startPolling, fetchUnreadCount } = useNotificationStore();
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     document.title = 'Notifications | Sonara';
@@ -171,6 +173,15 @@ const NotificationsPage = () => {
         const piece = n.track_title || n.publication_title || 'your song';
         return <><strong>{name}</strong> replied to your comment on <strong>{piece}</strong></>;
       }
+      case 'purchase': {
+        const piece = n.track_title || n.publication_title || 'your song';
+        const priceLabel = n.amount == null
+          ? ''
+          : parseFloat(n.amount) === 0
+            ? ' for free'
+            : ` for $${parseFloat(n.amount).toFixed(2)}`;
+        return <><strong>{name}</strong> purchased <strong>{piece}</strong>{priceLabel}</>;
+      }
       case 'repost':
         return <><strong>{name}</strong> reposted your song</>;
       case 'mention': {
@@ -198,6 +209,8 @@ const NotificationsPage = () => {
         return <span style={{ fontSize: 14 }}>💬</span>;
       case 'mention':
         return <span style={{ fontSize: 14 }}>@</span>;
+      case 'purchase':
+        return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>;
       case 'repost':
         return <RepostIcon size={16} active />;
       default:
@@ -236,7 +249,7 @@ const NotificationsPage = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -251,9 +264,9 @@ const NotificationsPage = () => {
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
           <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
           </div>
@@ -266,15 +279,16 @@ const NotificationsPage = () => {
           <Link to="/create" style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* Main area */}
-      <div style={styles.mainArea}>
-        <div style={styles.contentWrapper}>
-          <div style={styles.mainContent}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="notif-content" style={styles.contentWrapper}>
+          <div className="notif-main" style={styles.mainContent}>
             {/* Tabs */}
-            <div style={styles.tabBar}>
+            <div className="notif-tabs" style={styles.tabBar}>
               {([
                 { key: 'all' as TabFilter, label: 'All', count: unreadAll },
                 { key: 'likes' as TabFilter, label: 'Likes', count: unreadLikes },
@@ -335,7 +349,7 @@ const NotificationsPage = () => {
                 {filtered.map((n) => (
                   <div
                     key={n.id}
-                    className="notif-row"
+                    className="notif-row notif-item"
                     style={{
                       ...styles.notifRow,
                       ...(isUnread(n) ? styles.notifRowUnread : styles.notifRowRead),
@@ -456,6 +470,14 @@ const styles: Record<string, React.CSSProperties> = {
   sidebarBottom: {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
   },
   uploadBtn: {
     display: 'block',

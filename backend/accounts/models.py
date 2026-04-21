@@ -1,6 +1,7 @@
 import os
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.signals import pre_delete, pre_save
@@ -90,12 +91,50 @@ class Track(models.Model):
     play_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)
     repost_count = models.PositiveIntegerField(default=0)
+    price = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
+    for_sale = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-uploaded_at']
 
     def __str__(self):
         return f"{self.title} — {self.user.username}"
+
+
+class Purchase(models.Model):
+    """A mock purchase of a track or publication by a user."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='purchases',
+    )
+    track = models.ForeignKey(
+        Track,
+        on_delete=models.CASCADE,
+        related_name='purchases',
+        null=True,
+        blank=True,
+    )
+    publication = models.ForeignKey(
+        'Publication',
+        on_delete=models.CASCADE,
+        related_name='purchases',
+        null=True,
+        blank=True,
+    )
+    amount_paid = models.DecimalField(max_digits=6, decimal_places=2)
+    purchased_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-purchased_at']
+        constraints = [
+            UniqueConstraint(fields=['user', 'track'], condition=Q(track__isnull=False), name='unique_user_track_purchase'),
+            UniqueConstraint(fields=['user', 'publication'], condition=Q(publication__isnull=False), name='unique_user_publication_purchase'),
+        ]
+
+    def __str__(self):
+        item = self.track or self.publication
+        return f"{self.user.username} bought {item.title if item else '?'}"
 
 
 class TrackRepost(models.Model):
@@ -170,6 +209,8 @@ class Publication(models.Model):
     play_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)
     published_at = models.DateTimeField(auto_now_add=True)
+    price = models.DecimalField(max_digits=6, decimal_places=2, default=0.00)
+    for_sale = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-published_at']
@@ -301,6 +342,7 @@ class Notification(models.Model):
     COMMENT_REPLY = 'comment_reply'
     REPOST = 'repost'
     MENTION = 'mention'
+    PURCHASE = 'purchase'
 
     TYPE_CHOICES = [
         (LIKE_TRACK, 'Liked your track'),
@@ -310,6 +352,7 @@ class Notification(models.Model):
         (COMMENT_REPLY, 'Replied to your comment'),
         (REPOST, 'Reposted your song'),
         (MENTION, 'Mentioned you in a comment'),
+        (PURCHASE, 'Purchased your track'),
     ]
 
     recipient = models.ForeignKey(
@@ -344,6 +387,7 @@ class Notification(models.Model):
     )
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -408,17 +452,15 @@ def delete_old_user_files(sender, instance, **kwargs):
     """Delete old files when user uploads new profile picture or header"""
     if not instance.pk:
         return  # New user, nothing to delete
-    
+
     try:
         old_instance = User.objects.get(pk=instance.pk)
     except User.DoesNotExist:
         return
-    
-    # Delete old profile picture if changed
+
     if old_instance.profile_picture and old_instance.profile_picture != instance.profile_picture:
         old_instance.profile_picture.delete(save=False)
-    
-    # Delete old header if changed
+
     if old_instance.header_image and old_instance.header_image != instance.header_image:
         old_instance.header_image.delete(save=False)
 
@@ -428,12 +470,12 @@ def delete_old_track_file(sender, instance, **kwargs):
     """Delete old audio file and cover image when track is updated with new files"""
     if not instance.pk:
         return
-    
+
     try:
         old_instance = Track.objects.get(pk=instance.pk)
     except Track.DoesNotExist:
         return
-    
+
     if old_instance.audio_file and old_instance.audio_file != instance.audio_file:
         old_instance.audio_file.delete(save=False)
 

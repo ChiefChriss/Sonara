@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import useDawStore from '../state/dawStore';
-import { MidiNote } from '../models/types';
+import { MidiNote } from '../models/Types';
 import { previewNoteOn, previewNoteChange, previewNoteOff } from '../engine/TransportSync';
 import Keyboard from './Keyboard';
 import EffectsPanel from './EffectsPanel';

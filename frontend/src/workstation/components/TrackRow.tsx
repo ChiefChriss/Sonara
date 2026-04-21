@@ -11,7 +11,7 @@ interface TrackRowProps {
   onToggleAutomation?: () => void;
 }
 
-import { getPreset, getPresetsByCategory, PRESETS } from '../models/presets';
+import { getPreset, getPresetsByCategory, PRESETS } from '../models/Presets';
 
 const TRACK_COLORS = [
   '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
@@ -67,7 +67,7 @@ const TrackRow: React.FC<TrackRowProps> = ({ trackId, automationOpen, onToggleAu
   const handleInstrumentChange = (presetId: string) => {
     const presetDef = getPreset(presetId);
     if (presetDef?.type === 'sampler') {
-      setSamplerReady(false); // show loading until samples arrive
+      setSamplerLoaded(false); // show loading until samples arrive
     }
     setTrackInstrument(track.id, presetId);
     rebuildTrackSynth({ ...track, instrument: presetId });

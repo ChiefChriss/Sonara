@@ -21,7 +21,7 @@ import dj_database_url
 ENV = os.environ.get('ENV', 'dev')
 
 if ENV == 'dev':
-    FRONTEND_URL = 'http://localhost:5173'
+    FRONTEND_URL = 'https://thv8qt7s-5173.usw3.devtunnels.ms/' #'http://localhost:5173'
 else:
     FRONTEND_URL = 'https://www.sonara.us'
 
@@ -47,7 +47,12 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     'backend-production-0d0e6.up.railway.app',
+    'thv8qt7s-5173.usw3.devtunnels.ms',
 ]
+
+# In dev, accept requests from any LAN device (e.g. phones, laptops on the same Wi-Fi).
+if ENV == 'dev':
+    ALLOWED_HOSTS += ['0.0.0.0', '*']
 
 CORS_ALLOW_ALL_ORIGINS = False  # For development only
 
@@ -57,11 +62,25 @@ CORS_ALLOWED_ORIGINS = [
     "https://sonara.us",
     "https://www.sonara.us",
     "https://backend-production-0d0e6.up.railway.app",
+    "https://thv8qt7s-5173.usw3.devtunnels.ms",
 ]
+
+# In dev, allow any origin from the local network (e.g. http://192.168.x.x:5173).
+if ENV == 'dev':
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
+        r"^http://10(\.\d{1,3}){3}(:\d+)?$",
+        r"^http://192\.168(\.\d{1,3}){2}(:\d+)?$",
+        r"^http://172\.(1[6-9]|2\d|3[0-1])(\.\d{1,3}){2}(:\d+)?$",
+    ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://www.sonara.us',
     'https://sonara.us',
+    'https://thv8qt7s-5173.usw3.devtunnels.ms',
+    'https://thv8qt7s-8000.usw3.devtunnels.ms',
 ]
 
 

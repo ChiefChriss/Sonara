@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlayerStore } from './stores/playerStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { useNotificationStore } from './stores/notificationStore';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
@@ -9,6 +10,8 @@ import RepostIcon from './components/RepostIcon';
 import TrackPageWaveform from './components/TrackPageWaveform';
 import { getTrackGradient } from './utils/trackGradient';
 import { getUserGradient } from './utils/userGradient';
+import Footer from './components/Footer';
+import { PlayGlyph, PauseGlyph, PlayPauseLabel } from './components/MediaIcons';
 
 // ── Interfaces (Chris) ──────────────────────────────────────────────────────
 
@@ -66,7 +69,7 @@ const ListenerHome = () => {
   // Chris: player store
   const globalPlayerState = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   // ── Auth + data fetch (Chris) ─────────────────────────────────────────────
 
@@ -182,7 +185,7 @@ const ListenerHome = () => {
             style={{ ...styles.cardPlayBtn, opacity: playing ? 1 : undefined }}
             onClick={(e) => { e.stopPropagation(); playing ? globalPlayerState.togglePlayPause() : playTrack(item); }}
           >
-            {playing ? '⏸' : '▶'}
+            {playing ? <PauseGlyph size={15} fill="#fff" /> : <PlayGlyph size={15} fill="#fff" />}
           </button>
           <button
             type="button"
@@ -208,7 +211,10 @@ const ListenerHome = () => {
             {item.display_name || item.username}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <p style={styles.cardPlays}>▶ {formatCount(item.play_count)}</p>
+            <p style={{ ...styles.cardPlays, display: 'flex', alignItems: 'center', gap: 4, margin: 0 }}>
+              <PlayGlyph size={10} fill="rgba(255,255,255,0.4)" />
+              {formatCount(item.play_count)}
+            </p>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
               {formatCount(item.like_count)}
@@ -257,7 +263,7 @@ const ListenerHome = () => {
               style={{ ...styles.rowPlay, opacity: playing ? 1 : undefined }}
               onClick={() => (playing ? globalPlayerState.togglePlayPause() : playTrack(t))}
             >
-              {playing ? '⏸' : '▶'}
+              {playing ? <PauseGlyph size={18} fill="#a78bfa" /> : <PlayGlyph size={18} fill="#a78bfa" />}
             </button>
             {t.profile_picture && (
               <img
@@ -297,7 +303,10 @@ const ListenerHome = () => {
               />
             ))}
           </div>
-          <span style={styles.rowCount}>▶ {formatCount(t.play_count)}</span>
+          <span style={{ ...styles.rowCount, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+            <PlayGlyph size={11} fill="rgba(255,255,255,0.35)" />
+            {formatCount(t.play_count)}
+          </span>
         </div>
       </div>
     );
@@ -308,7 +317,7 @@ const ListenerHome = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* ── Sidebar (Tony) ──────────────────────────────────────────────────── */}
-      <aside style={{...styles.sidebar, bottom: globalPlayerState.currentTrack ? 72 : 0}}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: globalPlayerState.currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -323,9 +332,12 @@ const ListenerHome = () => {
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+
+          {/* ── CHANGED: Marketplace is now a real link instead of greyed out ── */}
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
+
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -340,29 +352,30 @@ const ListenerHome = () => {
         </nav>
 
         <div style={styles.sidebarBottom}>
-          <Link to="/create" style={styles.uploadBtn}>
+          <Link to={username ? `/@${username}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* ── Main area ───────────────────────────────────────────────────────── */}
-      <div style={styles.mainArea}>
+      <div className="sidebar-main" style={styles.mainArea}>
         {/* ── Hero banner (Tony) ──────────────────────────────────────────── */}
-        <div style={styles.heroBanner}>
+        <div className="hero-responsive" style={styles.heroBanner}>
           <div style={styles.heroOverlay} />
           <div style={styles.heroContent}>
-            <h1 style={styles.heroTitle}>Listen. Create. Connect.</h1>
-            <p style={styles.heroSubtitle}>Discover your next favorite sound or make your own.</p>
+            <h1 className="hero-title-responsive" style={styles.heroTitle}>Listen. Create. Connect.</h1>
+            <p className="hero-subtitle-responsive" style={styles.heroSubtitle}>Discover your next favorite sound or make your own.</p>
           </div>
         </div>
 
         {/* ── Featured Track (Tony design, real data) ─────────────────────── */}
         {!contentLoading && allTracks.length > 0 && (
-          <section style={styles.featuredSection}>
+          <section className="content-padding" style={styles.featuredSection}>
             <h2 style={styles.sectionTitle}>Featured Track</h2>
-            <div style={styles.featuredCard}>
-              <div className="card-img-wrap" style={{ ...styles.featuredLeft, cursor: 'pointer', position: 'relative' }} onClick={() => navigate(`/${allTracks[0].type}/${allTracks[0].id}`)}>
+            <div className="featured-responsive" style={styles.featuredCard}>
+              <div className="card-img-wrap featured-left-responsive" style={{ ...styles.featuredLeft, cursor: 'pointer', position: 'relative' }} onClick={() => navigate(`/${allTracks[0].type}/${allTracks[0].id}`)}>
                 {allTracks[0].cover_image ? (
                   <img src={allTracks[0].cover_image} alt="" style={styles.featuredImage} />
                 ) : (
@@ -420,9 +433,12 @@ const ListenerHome = () => {
                         : playTrack(allTracks[0])
                     }
                   >
-                    {isPlaying(allTracks[0]) ? '⏸ Pause' : '▶ Play'}
+                    <PlayPauseLabel playing={isPlaying(allTracks[0])} />
                   </button>
-                  <span style={styles.featuredPlays}>▶ {formatCount(allTracks[0].play_count)}</span>
+                  <span style={{ ...styles.featuredPlays, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <PlayGlyph size={12} fill="rgba(255,255,255,0.45)" />
+                    {formatCount(allTracks[0].play_count)}
+                  </span>
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,255,255,0.4)" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                     {formatCount(allTracks[0].like_count)}
@@ -434,7 +450,7 @@ const ListenerHome = () => {
         )}
 
         {/* ── Main content ────────────────────────────────────────────────── */}
-        <div style={styles.mainContent}>
+        <div className="content-padding" style={styles.mainContent}>
           {contentLoading ? (
             <div style={{ textAlign: 'center', margin: '40px 0', opacity: 0.6 }}>
               Loading featured tracks…
@@ -453,7 +469,7 @@ const ListenerHome = () => {
                     </h2>
                     <Link to="/explore" style={styles.seeAll}>See all</Link>
                   </div>
-                  <div style={styles.trackGrid}>
+                  <div className="track-grid-responsive" style={styles.trackGrid}>
                     {newReleases.slice(0, 6).map((item, idx) => (
                       <TrackCard key={`nr-${item.type}-${item.id}`} item={item} index={idx + 3} />
                     ))}
@@ -504,6 +520,7 @@ const ListenerHome = () => {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.4); border-radius: 2px; }
       `}</style>
+      
     </div>
   );
 };
@@ -576,6 +593,14 @@ const styles: Record<string, React.CSSProperties> = {
   sidebarBottom: {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
   },
   uploadBtn: {
     display: 'block',
@@ -798,7 +823,6 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Track grid (Tony's 6-column gradient cards) ───────────────────────────
   trackGrid: {
     display: 'grid',
-    /* minmax(0,1fr) so column width ignores huge image intrinsic sizes — keeps every cell equal */
     gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
     gap: 16,
   },
@@ -958,12 +982,15 @@ const styles: Record<string, React.CSSProperties> = {
     width: 190,
     flexShrink: 0,
     cursor: 'pointer',
+    paddingTop: 2,
+    minWidth: 0,
   },
   rowTitle: {
     display: 'block',
     fontSize: 14,
     fontWeight: 600,
     color: '#fff',
+    lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -973,6 +1000,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     fontSize: 12,
     color: '#ec4899',
+    lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -987,6 +1015,11 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     opacity: 0.7,
   },
+  waveBar: {
+    width: 3,
+    borderRadius: 2,
+    transition: 'height 0.1s',
+  },
   rowCount: {
     flexShrink: 0,
     fontSize: 12,
@@ -995,7 +1028,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'right',
   },
 
-  // Avatar badges (profile picture circle on track images)
+  // Avatar badges
   cardAvatarBadge: {
     position: 'absolute',
     bottom: 6,
@@ -1017,6 +1050,18 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     objectFit: 'cover',
     border: '2px solid #13131f',
+    cursor: 'pointer',
+    zIndex: 2,
+  } as React.CSSProperties,
+  rowAvatarBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '1.5px solid #13131f',
     cursor: 'pointer',
     zIndex: 2,
   } as React.CSSProperties,

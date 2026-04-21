@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getApiBaseUrl } from './utils/apiBase';
 
 const ProfileRedirect = () => {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ const ProfileRedirect = () => {
         return;
       }
       try {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+        const baseUrl = getApiBaseUrl();
         const response = await fetch(`${baseUrl}/api/auth/profile/`, {
           headers: {
             Authorization: `Bearer ${accessToken}`,

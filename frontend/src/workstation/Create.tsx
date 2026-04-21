@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { listProjects } from './api/ProjectApi';
 import sonaraLogo from '../assets/sonara_logo.svg';
@@ -6,6 +6,8 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from '../stores/playerStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { apiFetch } from '../utils/api';
+import TrackEditModal from '../components/TrackEditModal';
+import { getApiBaseUrl } from '../utils/apiBase';
 
 interface Project {
   id: number;
@@ -20,6 +22,10 @@ const ArtistHome = () => {
   const [username, setUsername] = useState('');
   const { currentTrack } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
+  const [trackFile, setTrackFile] = useState<File | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputId = 'create-upload-track-input';
 
   useEffect(() => {
     document.title = 'Artist Home | Sonara';
@@ -29,7 +35,7 @@ const ArtistHome = () => {
       return;
     }
 
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     const fetchProfile = async () => {
       try {
@@ -72,7 +78,7 @@ const ArtistHome = () => {
   return (
     <div style={styles.pageWrapper}>
       {/* Sidebar */}
-      <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+      <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -89,9 +95,9 @@ const ArtistHome = () => {
           <Link to="/create" className="sidebar-link" style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -111,12 +117,44 @@ const ArtistHome = () => {
       </nav>
 
       {/* Main Area */}
-      <div style={styles.mainArea}>
-        <div style={styles.content}>
-          {/* Create New Track Button */}
-          <Link to="/workstation" style={styles.createButton}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="create-content" style={styles.content}>
+          {/* Create New Track (DAW) */}
+          <Link to="/workstation" className="create-btn" style={styles.createButton}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 10, flexShrink: 0 }}>
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
             Create New Track
           </Link>
+
+          {/* Upload Track */}
+          <input
+            ref={uploadInputRef}
+            id={uploadInputId}
+            type="file"
+            accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+            style={styles.hiddenUploadInput}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                setTrackFile(f);
+                setShowUploadModal(true);
+              }
+              e.target.value = '';
+            }}
+          />
+          <label
+            htmlFor={uploadInputId}
+            className="create-btn"
+            style={styles.uploadButton}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 10, flexShrink: 0 }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Upload Track
+          </label>
 
           {/* My Projects Section */}
           <div style={styles.projectsSection}>
@@ -132,10 +170,11 @@ const ArtistHome = () => {
                   <Link
                     key={project.id}
                     to={`/workstation/${project.id}`}
+                    className="create-project-card"
                     style={styles.projectCard}
                   >
                     <div style={styles.projectInfo}>
-                      <span style={styles.projectTitle}>{project.name}</span>
+                      <span className="create-project-title" style={styles.projectTitle}>{project.name}</span>
                       <span style={styles.projectDate}>{new Date(project.updated_at).toLocaleDateString()}</span>
                     </div>
                     <span style={styles.projectArrow}>→</span>
@@ -146,6 +185,23 @@ const ArtistHome = () => {
           </div>
         </div>
       </div>
+
+      {/* Upload Track Modal (same as profile page) */}
+      {showUploadModal && (
+        <TrackEditModal
+          isOpen={showUploadModal}
+          onClose={() => {
+            setShowUploadModal(false);
+            setTrackFile(null);
+          }}
+          mode="upload_track"
+          initialFile={trackFile}
+          onSuccess={() => {
+            setShowUploadModal(false);
+            setTrackFile(null);
+          }}
+        />
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');
@@ -280,7 +336,36 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 4px 20px rgba(167,139,250,0.3)',
     textDecoration: 'none',
     textAlign: 'center' as const,
+    marginBottom: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadButton: {
+    width: '100%',
+    padding: '18px 40px',
+    fontSize: '18px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    background: 'transparent',
+    border: '2px solid rgba(167,139,250,0.4)',
+    borderRadius: '12px',
+    color: '#ffffff',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    textDecoration: 'none',
+    textAlign: 'center' as const,
     marginBottom: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hiddenUploadInput: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    pointerEvents: 'none',
   },
   projectsSection: {
     width: '100%',

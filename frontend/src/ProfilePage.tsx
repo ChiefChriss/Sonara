@@ -1,15 +1,17 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import NotFound from './NotFound';
 import ImageCropModal from './components/ImageCropModal';
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import TrackEditModal from './components/TrackEditModal';
 import RepostIcon from './components/RepostIcon';
 import sonaraLogo from './assets/sonara_logo.svg';
 import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIcon } from './components/SidebarIcons';
 import { getUserGradient } from './utils/userGradient';
+import { PlayGlyph, PauseGlyph } from './components/MediaIcons';
 
 interface UserProfile {
   id: number;
@@ -42,6 +44,8 @@ interface Track {
   audio_file: string;
   uploaded_at: string;
   cover_image?: string;
+  price?: string;
+  for_sale?: boolean;
 }
 
 interface RepostListEntry {
@@ -58,14 +62,49 @@ interface RepostListEntry {
   };
 }
 
-const TABS = ['Posts', 'Tracks', 'Playlists', 'Reposts'] as const;
+interface Publication {
+  id: number;
+  title: string;
+  description?: string;
+  audio_file: string;
+  cover_image?: string | null;
+  published_at: string;
+  username: string;
+  display_name?: string;
+  profile_picture?: string | null;
+  like_count?: number;
+  play_count?: number;
+  is_liked?: boolean;
+}
+
+interface LikedItem {
+  id: number;
+  type: 'track' | 'publication';
+  title: string;
+  audio_file: string;
+  cover_image?: string | null;
+  date: string;
+  username: string;
+  display_name?: string;
+}
+
+type PostItem =
+  | { kind: 'track'; timestamp: string; track: Track }
+  | { kind: 'publication'; timestamp: string; publication: Publication }
+  | { kind: 'repost'; timestamp: string; repost: RepostListEntry };
+
+type ProfileView = 'music' | 'social' | 'manage';
 
 const ProfilePage = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Posts');
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<ProfileView>(() => {
+    const v = searchParams.get('view');
+    return (v === 'social' || v === 'manage') ? v : 'music';
+  });
   const [editing, setEditing] = useState(false);
   const [editBio, setEditBio] = useState('');
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -85,6 +124,8 @@ const ProfilePage = () => {
   const [editTargetId, setEditTargetId] = useState<number | undefined>(undefined);
   const [editInitialTitle, setEditInitialTitle] = useState('');
   const [editInitialCover, setEditInitialCover] = useState<string | null>(null);
+  const [editInitialPrice, setEditInitialPrice] = useState('0');
+  const [editInitialForSale, setEditInitialForSale] = useState(false);
   const [deletingTrackId, setDeletingTrackId] = useState<number | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
@@ -96,11 +137,15 @@ const ProfilePage = () => {
   const [loggedInUsername, setLoggedInUsername] = useState('');
   const [reposts, setReposts] = useState<RepostListEntry[]>([]);
   const [repostsLoading, setRepostsLoading] = useState(false);
+  const [publications, setPublications] = useState<Publication[]>([]);
+  const [publicationsLoading, setPublicationsLoading] = useState(false);
+  const [likedItems, setLikedItems] = useState<LikedItem[]>([]);
+  const [likesLoading, setLikesLoading] = useState(false);
 
-  const { currentTrack, isPlaying, play, togglePlayPause, stop } = usePlayerStore();
+  const { currentTrack, isPlaying, play, togglePlayPause, stop, toggleShuffle, isShuffleEnabled } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
-  const trackInputRef = useRef<HTMLInputElement>(null);
+  const trackUploadInputId = 'profile-track-upload-input';
   const headerInputRef = useRef<HTMLInputElement>(null);
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const [cropTarget, setCropTarget] = useState<'header' | 'pfp' | null>(null);
@@ -109,7 +154,7 @@ const ProfilePage = () => {
   const { handle } = useParams<{ handle: string }>();
   const urlUsername = handle?.startsWith('@') ? handle.slice(1) : handle;
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   const startEditing = () => {
     setEditBio(user?.bio ?? '');
@@ -170,6 +215,69 @@ const ProfilePage = () => {
     }
   }, [API_BASE_URL, urlUsername]);
 
+  const fetchPublications = useCallback(async () => {
+    if (!urlUsername) return;
+    setPublicationsLoading(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const headers: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      const res = await fetch(`${API_BASE_URL}/api/auth/users/${urlUsername}/publications/`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setPublications(Array.isArray(data) ? data : []);
+      } else {
+        setPublications([]);
+      }
+    } catch {
+      setPublications([]);
+    } finally {
+      setPublicationsLoading(false);
+    }
+  }, [API_BASE_URL, urlUsername]);
+
+  const fetchLikes = useCallback(async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken || !isOwnProfile) {
+      setLikedItems([]);
+      return;
+    }
+    setLikesLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/library/');
+      if (!res.ok) throw new Error('Failed to load likes');
+      const data = await res.json();
+      const likedTracks: LikedItem[] = (data.tracks || []).map((track: any) => ({
+        id: track.id,
+        type: 'track' as const,
+        title: track.title,
+        audio_file: track.audio_file,
+        cover_image: track.cover_image || track.profile_picture || null,
+        date: track.uploaded_at,
+        username: track.username,
+        display_name: track.display_name || '',
+      }));
+      const likedPublications: LikedItem[] = (data.publications || []).map((publication: any) => ({
+        id: publication.id,
+        type: 'publication' as const,
+        title: publication.title,
+        audio_file: publication.audio_file,
+        cover_image: publication.cover_image || publication.profile_picture || null,
+        date: publication.published_at,
+        username: publication.username,
+        display_name: publication.display_name || '',
+      }));
+      setLikedItems(
+        [...likedTracks, ...likedPublications].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        )
+      );
+    } catch {
+      setLikedItems([]);
+    } finally {
+      setLikesLoading(false);
+    }
+  }, [isOwnProfile]);
+
   const deleteTrack = async (trackId: number) => {
     const accessToken = localStorage.getItem('accessToken');
     if (!accessToken) return;
@@ -227,12 +335,22 @@ const ProfilePage = () => {
       togglePlayPause();
       return;
     }
+    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
+    const artistHandle = user?.username || urlUsername || '';
+    const queue = tracks.map((t) => ({
+      id: t.id, type: 'track' as const,
+      title: t.title, artist: artistName,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }));
     play({
       id: track.id, type: 'track',
-      title: track.title, artist: user?.display_name || user?.username || urlUsername || 'Unknown',
-      audioUrl: track.audio_file, coverImage: user?.profile_picture || null,
-      artistHandle: user?.username || urlUsername || '',
-    });
+      title: track.title, artist: artistName,
+      audioUrl: track.audio_file,
+      coverImage: track.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }, { queue });
   };
 
   const playRepostedTrack = (t: RepostListEntry['track']) => {
@@ -249,6 +367,56 @@ const ProfilePage = () => {
       coverImage: t.cover_image || t.profile_picture || null,
       artistHandle: t.username,
     });
+  };
+
+  const playPublication = (publication: Publication) => {
+    if (currentTrack?.id === publication.id && currentTrack?.type === 'publication') {
+      togglePlayPause();
+      return;
+    }
+    const artistName = publication.display_name || publication.username;
+    const artistHandle = publication.username;
+    const queue = publications.map((p) => ({
+      id: p.id, type: 'publication' as const,
+      title: p.title, artist: artistName,
+      audioUrl: p.audio_file,
+      coverImage: p.cover_image || p.profile_picture || null,
+      artistHandle,
+    }));
+    play({
+      id: publication.id, type: 'publication',
+      title: publication.title, artist: artistName,
+      audioUrl: publication.audio_file,
+      coverImage: publication.cover_image || publication.profile_picture || null,
+      artistHandle,
+    }, { queue });
+  };
+
+  const buildDiscographyQueue = () => {
+    const artistName = user?.display_name || user?.username || urlUsername || 'Unknown';
+    const artistHandle = user?.username || urlUsername || '';
+    return tracks.map((t) => ({
+      id: t.id, type: 'track' as const,
+      title: t.title, artist: artistName,
+      audioUrl: t.audio_file,
+      coverImage: t.cover_image || user?.profile_picture || null,
+      artistHandle,
+    }));
+  };
+
+  const playAll = () => {
+    const queue = buildDiscographyQueue();
+    if (!queue.length) return;
+    if (isShuffleEnabled) toggleShuffle();
+    play(queue[0], { queue });
+  };
+
+  const shuffleAll = () => {
+    const queue = buildDiscographyQueue();
+    if (!queue.length) return;
+    if (!isShuffleEnabled) toggleShuffle();
+    const start = queue[Math.floor(Math.random() * queue.length)];
+    play(start, { queue });
   };
 
   const saveProfile = async () => {
@@ -403,8 +571,29 @@ const ProfilePage = () => {
   }, [fetchTracks, isOwnProfile]);
 
   useEffect(() => {
-    if (activeTab === 'Reposts') fetchReposts();
-  }, [activeTab, fetchReposts]);
+    if (user) fetchPublications();
+  }, [user?.username, fetchPublications]);
+
+  useEffect(() => {
+    if (view === 'social') {
+      fetchReposts();
+      fetchLikes();
+    }
+  }, [view, fetchReposts, fetchLikes]);
+
+  const postItems = useMemo<PostItem[]>(
+    () =>
+      [
+        ...tracks.map((track) => ({ kind: 'track' as const, timestamp: track.uploaded_at, track })),
+        ...publications.map((publication) => ({
+          kind: 'publication' as const,
+          timestamp: publication.published_at,
+          publication,
+        })),
+        ...reposts.map((repost) => ({ kind: 'repost' as const, timestamp: repost.reposted_at, repost })),
+      ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [tracks, publications, reposts]
+  );
 
   const headerPreviewUrl = useMemo(
     () => (headerFile ? URL.createObjectURL(headerFile) : null),
@@ -487,7 +676,7 @@ const ProfilePage = () => {
       `}</style>
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+      <aside className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
         </div>
@@ -502,9 +691,10 @@ const ProfilePage = () => {
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
+
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -513,20 +703,21 @@ const ProfilePage = () => {
               </span>
             )}
           </Link>
-          <div style={{ ...styles.sidebarLink, ...styles.sidebarLinkActive }}>
+          <Link to={loggedInUsername ? `/@${loggedInUsername}` : '/profile'} className="sidebar-link" style={{ ...styles.sidebarLink, ...(isOwnProfile ? styles.sidebarLinkActive : {}) }}>
             <span style={styles.sidebarIcon}><ProfileIcon /></span> Profile
-          </div>
+          </Link>
         </nav>
 
         <div style={styles.sidebarBottom}>
-          <Link to="/create" style={styles.uploadBtn}>
+          <Link to={loggedInUsername ? `/@${loggedInUsername}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>
             + Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </aside>
 
       {/* ── Main content area ────────────────────────────────────────── */}
-      <div style={styles.mainArea}>
+      <div className="sidebar-main" style={styles.mainArea}>
 
       {/* Hidden file inputs (always in DOM) */}
       <input
@@ -741,6 +932,7 @@ const ProfilePage = () => {
       {/* Cover */}
       <div style={styles.coverWrap}>
         <div
+          className="profile-cover-responsive"
           style={{
             ...styles.cover,
             ...(getHeaderImageUrl()
@@ -754,7 +946,7 @@ const ProfilePage = () => {
 
       <div style={styles.main}>
         {/* Profile info block */}
-        <div style={styles.profileBlock}>
+        <div className="profile-info-section" style={styles.profileBlock}>
           <div
             style={{
               ...styles.avatar,
@@ -783,7 +975,7 @@ const ProfilePage = () => {
           </div>
 
           {/* Follower / Following counts */}
-          <div style={styles.followStats}>
+          <div className="profile-stats-row" style={styles.followStats}>
             <button type="button" onClick={() => openFollowList('followers')} style={styles.followStatBtn}>
               <strong>{followerCount}</strong> Followers
             </button>
@@ -807,189 +999,274 @@ const ProfilePage = () => {
           <div style={styles.rolePill}>{roleLabel}</div>
 
           {user?.bio?.trim() ? (
-            <p style={styles.bio}>{user.bio}</p>
+            <p className="profile-bio" style={styles.bio}>{user.bio}</p>
           ) : null}
 
-          {isOwnProfile && (
-            <div style={styles.actions}>
-              <button
-                type="button"
-                onClick={() => {
-                  stop();
-                  localStorage.removeItem('accessToken');
-                  localStorage.removeItem('refreshToken');
-                  localStorage.removeItem('username');
-                  navigate('/login');
-                }}
-                style={styles.logoutBtn}
-              >
-                Log out
+          {tracks.length > 0 && (
+            <div style={styles.discographyActions}>
+              <button type="button" onClick={playAll} style={styles.playAllBtn}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+                Play
+              </button>
+              <button type="button" onClick={shuffleAll} style={{ ...styles.shuffleAllBtn, ...(isShuffleEnabled ? styles.shuffleAllBtnActive : {}) }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" />
+                  <polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" />
+                </svg>
+                Shuffle
               </button>
             </div>
           )}
         </div>
 
-        {/* Tabs */}
-        <div style={styles.tabsWrap}>
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                ...styles.tab,
-                ...(activeTab === tab ? styles.tabActive : {}),
-              }}
-            >
-              {tab}
-            </button>
-          ))}
+        {/* View toggle */}
+        <div className="profile-tab-bar" style={styles.tabsWrap}>
+          <button type="button" onClick={() => setView('music')} style={{ ...styles.tab, ...(view === 'music' ? styles.tabActive : {}) }}>Music</button>
+          <button type="button" onClick={() => setView('social')} style={{ ...styles.tab, ...(view === 'social' ? styles.tabActive : {}) }}>Social</button>
+          {isOwnProfile && <button type="button" onClick={() => setView('manage')} style={{ ...styles.tab, ...(view === 'manage' ? styles.tabActive : {}) }}>Manage</button>}
         </div>
 
-        {/* Tab content */}
-        <div style={styles.tabContent}>
-          {activeTab === 'Tracks' ? (
+        {/* Content */}
+        <div className="profile-tab-content" style={styles.tabContent}>
+          {view === 'music' ? (
+            /* ── Music view: scrollable discography ── */
             <div>
-              {isOwnProfile && (
-                <div style={styles.trackUploadSection}>
-                  <h3 style={styles.trackSectionTitle}>Upload a track</h3>
-                  <div style={styles.trackUploadForm}>
-                    <input
-                      ref={trackInputRef}
-                      type="file"
-                      accept="audio/*"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          setTrackFile(f);
-                          setModalMode('upload_track');
-                        }
-                        e.target.value = '';
-                      }}
-                      style={styles.hiddenFileInput}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => trackInputRef.current?.click()}
-                      className="profile-upload-card"
-                      style={styles.uploadCard}
-                    >
-                      <span style={styles.uploadIcon}>♫</span>
-                      <span style={styles.uploadText}>{'Choose audio file'}</span>
-                    </button>
-                  </div>
+              {/* Music section — tracks + publications combined */}
+              {(tracksLoading || publicationsLoading || tracks.length > 0 || publications.length > 0) && (
+                <div style={styles.musicSection}>
+                  <h3 style={styles.musicSectionTitle}>Music</h3>
+                  {tracksLoading || publicationsLoading ? (
+                    <p style={styles.comingSoon}>Loading...</p>
+                  ) : (
+                    <div style={styles.musicGrid}>
+                      {tracks.map((track) => {
+                        const playing = currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying;
+                        return (
+                          <div key={`track-${track.id}`} style={styles.musicCard} onClick={() => navigate(`/track/${track.id}`)}>
+                            <div style={styles.musicCardCover}>
+                              {track.cover_image
+                                ? <img src={track.cover_image} alt="" style={styles.musicCardImg} />
+                                : <div style={{ ...styles.musicCardImg, background: getUserGradient(track.id) }} />}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); togglePlay(track); }}
+                                style={styles.musicCardPlayBtn}
+                                aria-label={playing ? 'Pause' : 'Play'}
+                              >
+                                {playing ? <PauseGlyph size={14} fill="#fff" /> : <PlayGlyph size={14} fill="#fff" />}
+                              </button>
+                            </div>
+                            <span style={styles.musicCardTitle}>{track.title}</span>
+                            <span style={styles.musicCardSub}>Track</span>
+                          </div>
+                        );
+                      })}
+                      {publications.map((pub) => {
+                        const playing = currentTrack?.id === pub.id && currentTrack?.type === 'publication' && isPlaying;
+                        return (
+                          <div key={`pub-${pub.id}`} style={styles.musicCard} onClick={() => navigate(`/publication/${pub.id}`)}>
+                            <div style={styles.musicCardCover}>
+                              {pub.cover_image
+                                ? <img src={pub.cover_image} alt="" style={styles.musicCardImg} />
+                                : <div style={{ ...styles.musicCardImg, background: getUserGradient(pub.id) }} />}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); playPublication(pub); }}
+                                style={styles.musicCardPlayBtn}
+                                aria-label={playing ? 'Pause' : 'Play'}
+                              >
+                                {playing ? <PauseGlyph size={14} fill="#fff" /> : <PlayGlyph size={14} fill="#fff" />}
+                              </button>
+                            </div>
+                            <span style={styles.musicCardTitle}>{pub.title}</span>
+                            <span style={styles.musicCardSub}>Made in Sonara</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {tracksLoading ? (
-                <p style={styles.comingSoon}>Loading tracks...</p>
-              ) : tracks.length === 0 ? (
-                <p style={styles.comingSoon}>{isOwnProfile ? 'No tracks uploaded yet' : 'No tracks yet'}</p>
-              ) : (
-                <div style={styles.trackList}>
-                  {tracks.map((track) => (
-                    <div key={track.id} style={styles.trackCard}>
-                      <button
-                        type="button"
-                        onClick={() => togglePlay(track)}
-                        style={styles.playBtn}
-                        aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}
-                      >
-                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? '⏸' : '▶'}
-                      </button>
-                      <div style={styles.trackInfo}>
-                        <span style={styles.trackTitle}>{track.title}</span>
-                        <span style={styles.trackDate}>
-                          {new Date(track.uploaded_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {isOwnProfile && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditTargetId(track.id);
-                              setEditInitialTitle(track.title);
-                              setEditInitialCover(track.cover_image || null);
-                              setModalMode('edit_track');
-                            }}
-                            style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
-                            title="Edit metadata"
-                          >
-                            ✎
+              {/* Marketplace section */}
+              {(() => {
+                const forSale = tracks.filter(t => t.for_sale);
+                if (!forSale.length) return null;
+                return (
+                  <div style={styles.musicSection}>
+                    <h3 style={styles.musicSectionTitle}>Marketplace</h3>
+                    <div style={styles.trackList}>
+                      {forSale.map((track) => (
+                        <div key={track.id} style={styles.trackCard}>
+                          <button type="button" onClick={() => togglePlay(track)} style={styles.playBtn}
+                            aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
+                            {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying
+                              ? <PauseGlyph size={16} fill="#fff" />
+                              : <PlayGlyph size={16} fill="#fff" />}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteTrack(track.id)}
-                            style={styles.trackDeleteBtn}
-                            disabled={deletingTrackId === track.id}
-                            title="Delete track"
-                          >
-                            {deletingTrackId === track.id ? '...' : '✕'}
-                          </button>
+                          <div style={styles.trackInfo}>
+                            <span style={styles.trackTitle}>{track.title}</span>
+                            <span style={styles.trackDate}>${parseFloat(track.price || '0').toFixed(2)}</span>
+                          </div>
+                          <button type="button" onClick={() => navigate(`/track/${track.id}`)} style={styles.repostOpenBtn}>Open</button>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                );
+              })()}
+
+              {!tracksLoading && !publicationsLoading && tracks.length === 0 && publications.length === 0 && (
+                <p style={styles.comingSoon}>No music yet.</p>
               )}
+
             </div>
-          ) : activeTab === 'Reposts' ? (
+
+          ) : view === 'social' ? (
+            /* ── Social view: reposts + likes ── */
             <div>
-              {repostsLoading ? (
-                <p style={styles.comingSoon}>Loading reposts…</p>
-              ) : reposts.length === 0 ? (
-                <p style={styles.comingSoon}>
-                  {isOwnProfile ? 'Repost tracks you love — they’ll show up here.' : 'No reposts yet.'}
-                </p>
+              {repostsLoading || likesLoading ? (
+                <p style={styles.comingSoon}>Loading...</p>
+              ) : reposts.length === 0 && likedItems.length === 0 ? (
+                <p style={styles.comingSoon}>No social activity yet.</p>
               ) : (
                 <div style={styles.trackList}>
-                  {reposts.map((entry) => (
-                    <div key={`${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
+                  {/* ── Reposts section ── */}
+                  <div style={styles.socialSectionHeader}>
+                    <span style={styles.socialSectionTitle}>Reposts</span>
+                    <span style={styles.socialSectionCount}>{reposts.length}</span>
+                  </div>
+                  {reposts.length === 0 ? (
+                    <p style={styles.socialEmpty}>No reposts yet.</p>
+                  ) : reposts.map((entry) => (
+                    <div key={`repost-${entry.track.id}-${entry.reposted_at}`} style={styles.repostCard}>
                       <div style={styles.repostCardMeta}>
                         <span style={styles.repostBadge}>
-                            <RepostIcon size={14} active />
-                            <span style={{ marginLeft: 6 }}>Reposted</span>
+                          <RepostIcon size={14} active />
+                          <span style={{ marginLeft: 6 }}>Reposted</span>
                         </span>
                         <span style={styles.repostDate}>
-                          {new Date(entry.reposted_at).toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
+                          {new Date(entry.reposted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       </div>
                       <div style={styles.trackCard}>
-                        <button
-                          type="button"
-                          onClick={() => playRepostedTrack(entry.track)}
-                          style={styles.playBtn}
-                          aria-label={
-                            currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
-                              ? 'Pause'
-                              : 'Play'
-                          }
-                        >
+                        <button type="button" onClick={() => playRepostedTrack(entry.track)} style={styles.playBtn}
+                          aria-label={currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
                           {currentTrack?.id === entry.track.id && currentTrack?.type === 'track' && isPlaying
-                            ? '⏸'
-                            : '▶'}
+                            ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                         </button>
                         <div style={styles.trackInfo}>
                           <span style={styles.trackTitle}>{entry.track.title}</span>
-                          <button
-                            type="button"
-                            style={styles.repostOriginalArtist}
-                            onClick={() => navigate(`/@${entry.track.username}`)}
-                          >
+                          <button type="button" style={styles.repostOriginalArtist} onClick={() => navigate(`/@${entry.track.username}`)}>
                             {entry.track.display_name || entry.track.username}
                           </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/track/${entry.track.id}`)}
-                          style={styles.repostOpenBtn}
-                        >
-                          Open
+                        <button type="button" onClick={() => navigate(`/track/${entry.track.id}`)} style={styles.repostOpenBtn}>Open</button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* ── Likes section ── */}
+                  <div style={{ ...styles.socialSectionHeader, marginTop: 24 }}>
+                    <span style={styles.socialSectionTitle}>Likes</span>
+                    <span style={styles.socialSectionCount}>{likedItems.length}</span>
+                  </div>
+                  {likedItems.length === 0 ? (
+                    <p style={styles.socialEmpty}>No likes yet.</p>
+                  ) : likedItems.map((item) => (
+                    <div key={`like-${item.type}-${item.id}`} style={styles.repostCard}>
+                      <div style={styles.repostCardMeta}>
+                        <span style={styles.repostBadge}>♥ Liked</span>
+                        <span style={styles.repostDate}>{new Date(item.date).toLocaleDateString()}</span>
+                      </div>
+                      <div style={styles.trackCard}>
+                        <button type="button" onClick={() => {
+                          if (currentTrack?.id === item.id && currentTrack?.type === item.type) { togglePlayPause(); return; }
+                          const likesQueue = likedItems.map((li) => ({
+                            id: li.id, type: li.type, title: li.title,
+                            artist: li.display_name || li.username, audioUrl: li.audio_file,
+                            coverImage: li.cover_image || null, artistHandle: li.username,
+                          }));
+                          play({ id: item.id, type: item.type, title: item.title,
+                            artist: item.display_name || item.username, audioUrl: item.audio_file,
+                            coverImage: item.cover_image || null, artistHandle: item.username,
+                          }, { queue: likesQueue });
+                        }} style={styles.playBtn}
+                          aria-label={currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying ? 'Pause' : 'Play'}>
+                          {currentTrack?.id === item.id && currentTrack?.type === item.type && isPlaying
+                            ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
+                        </button>
+                        <div style={styles.trackInfo}>
+                          <span style={styles.trackTitle}>{item.title}</span>
+                          <button type="button" style={styles.repostOriginalArtist} onClick={() => navigate(`/@${item.username}`)}>
+                            {item.display_name || item.username}
+                          </button>
+                        </div>
+                        <button type="button" onClick={() => navigate(`/${item.type}/${item.id}`)} style={styles.repostOpenBtn}>Open</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          ) : view === 'manage' && isOwnProfile ? (
+            /* ── Manage view: owner track management ── */
+            <div>
+              <div style={styles.trackUploadSection}>
+                <h3 style={styles.trackSectionTitle}>Upload a track</h3>
+                <div style={styles.trackUploadForm}>
+                  <input
+                    id={trackUploadInputId}
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setTrackFile(f); setModalMode('upload_track'); }
+                      e.target.value = '';
+                    }}
+                    style={styles.hiddenFileInput}
+                  />
+                  <label htmlFor={trackUploadInputId} className="profile-upload-card" style={styles.uploadCard}>
+                    <span style={styles.uploadIcon}>♫</span>
+                    <span style={styles.uploadText}>Choose audio file</span>
+                  </label>
+                </div>
+              </div>
+              {tracksLoading ? (
+                <p style={styles.comingSoon}>Loading tracks...</p>
+              ) : tracks.length === 0 ? (
+                <p style={styles.comingSoon}>No tracks uploaded yet.</p>
+              ) : (
+                <div style={styles.trackList}>
+                  {tracks.map((track) => (
+                    <div key={track.id} className="profile-track-card" style={styles.trackCard}>
+                      <button type="button" onClick={() => togglePlay(track)} style={styles.playBtn}
+                        aria-label={currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying ? 'Pause' : 'Play'}>
+                        {currentTrack?.id === track.id && currentTrack?.type === 'track' && isPlaying
+                          ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
+                      </button>
+                      <div style={styles.trackInfo}>
+                        <span style={styles.trackTitle}>{track.title}</span>
+                        <span style={styles.trackDate}>{new Date(track.uploaded_at).toLocaleDateString()}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button type="button"
+                          onClick={() => {
+                            setEditTargetId(track.id);
+                            setEditInitialTitle(track.title);
+                            setEditInitialCover(track.cover_image || null);
+                            setEditInitialPrice(track.price || '0');
+                            setEditInitialForSale(track.for_sale || false);
+                            setModalMode('edit_track');
+                          }}
+                          style={{ ...styles.trackDeleteBtn, background: 'rgba(255,165,0,0.2)', color: 'orange', borderColor: 'orange' }}
+                          title="Edit metadata">✎</button>
+                        <button type="button" onClick={() => deleteTrack(track.id)} style={styles.trackDeleteBtn}
+                          disabled={deletingTrackId === track.id} title="Delete track">
+                          {deletingTrackId === track.id ? '...' : '✕'}
                         </button>
                       </div>
                     </div>
@@ -997,9 +1274,7 @@ const ProfilePage = () => {
                 </div>
               )}
             </div>
-          ) : (
-            <p style={styles.comingSoon}>{activeTab} — Coming soon</p>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1087,6 +1362,8 @@ const ProfilePage = () => {
           editId={editTargetId}
           initialTitle={editInitialTitle}
           initialCoverUrl={editInitialCover}
+          initialPrice={editInitialPrice}
+          initialForSale={editInitialForSale}
           onSuccess={() => {
             fetchTracks();
           }}
@@ -1100,7 +1377,8 @@ const ProfilePage = () => {
 const styles: Record<string, React.CSSProperties> = {
   pageWrapper: {
     display: 'flex',
-    minHeight: '100vh',
+    minHeight: '100dvh',
+    width: '100%',
     background: '#0f0f1a',
     fontFamily: "'Poppins', sans-serif",
     color: '#ffffff',
@@ -1163,6 +1441,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
   },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
+  },
   uploadBtn: {
     display: 'block',
     textAlign: 'center' as const,
@@ -1193,33 +1479,43 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    flex: 1,
+    width: '100%',
+    minHeight: '100dvh',
     gap: '12px',
+    padding: '24px',
     position: 'relative',
     zIndex: 1,
+    textAlign: 'center' as const,
   },
   spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid rgba(255,255,255,0.2)',
+    width: '44px',
+    height: '44px',
+    border: '3px solid rgba(167,139,250,0.15)',
     borderTopColor: '#a78bfa',
+    borderRightColor: '#ec4899',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: '14px',
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: '15px',
+    fontWeight: 500,
+    letterSpacing: '0.2px',
   },
   errorWrap: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '100vh',
+    flex: 1,
+    width: '100%',
+    minHeight: '100dvh',
     gap: '16px',
     padding: '24px',
     position: 'relative',
     zIndex: 1,
+    textAlign: 'center' as const,
   },
   errorText: {
     color: '#ff6b6b',
@@ -1766,6 +2062,98 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     margin: 0,
   },
+  socialSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginBottom: '12px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+  },
+  socialSectionTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.9)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.8px',
+  },
+  socialSectionCount: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'rgba(255,255,255,0.35)',
+    background: 'rgba(255,255,255,0.07)',
+    borderRadius: '10px',
+    padding: '2px 8px',
+  },
+  socialEmpty: {
+    fontSize: '13px',
+    color: 'rgba(255,255,255,0.3)',
+    margin: '0 0 8px 0',
+  },
+  musicSection: {
+    marginBottom: '36px',
+  },
+  musicSectionTitle: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    margin: '0 0 14px',
+  },
+  musicGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+    gap: '16px',
+  },
+  musicCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    cursor: 'pointer',
+  },
+  musicCardCover: {
+    position: 'relative' as const,
+    width: '100%',
+    aspectRatio: '1',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    marginBottom: '8px',
+    background: '#1c1c2e',
+  },
+  musicCardImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
+  },
+  musicCardPlayBtn: {
+    position: 'absolute' as const,
+    bottom: '8px',
+    right: '8px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+  },
+  musicCardTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#fff',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  musicCardSub: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: '2px',
+  },
   trackUploadSection: {
     marginBottom: '28px',
     padding: '20px',
@@ -1957,6 +2345,47 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "'Poppins', sans-serif",
     transition: 'color 0.2s',
   },
+  discographyActions: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
+    marginTop: '16px',
+    marginBottom: '14px',
+    flexWrap: 'wrap' as const,
+  },
+  playAllBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '9px 22px',
+    borderRadius: '9999px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #a78bfa, #ec4899)',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+    boxShadow: '0 3px 12px rgba(167,139,250,0.3)',
+  },
+  shuffleAllBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '7px',
+    padding: '9px 22px',
+    borderRadius: '9999px',
+    border: '2px solid rgba(167,139,250,0.35)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '14px',
+    fontWeight: 600,
+    fontFamily: "'Poppins', sans-serif",
+    cursor: 'pointer',
+  },
+  shuffleAllBtnActive: {
+    borderColor: '#a78bfa',
+    color: '#a78bfa',
+  },
   followBtn: {
     padding: '8px 28px',
     borderRadius: '9999px',
@@ -2071,3 +2500,4 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default ProfilePage;
+

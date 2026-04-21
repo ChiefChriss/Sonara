@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import useDawStore from '../state/dawStore';
-import { TrackEffects, DEFAULT_EFFECTS } from '../models/types';
+import { TrackEffects, DEFAULT_EFFECTS } from '../models/Types';
 import { updateEffects } from '../engine/TransportSync';
 import * as Icons from './Icons';
 

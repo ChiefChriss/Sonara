@@ -1,4 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { getApiBaseUrl } from '../utils/apiBase';
+
+// Reads embedded cover art from ID3v2 tags (MP3) without any library.
+async function extractCoverFromFile(file: File): Promise<File | null> {
+    try {
+        const buf = await file.slice(0, 512 * 1024).arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        // Must start with "ID3"
+        if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+        const id3Size =
+            ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) |
+            ((bytes[8] & 0x7f) << 7)  |  (bytes[9] & 0x7f);
+        const version = bytes[3]; // ID3 major version
+        let offset = 10;
+        while (offset < id3Size + 10) {
+            const frameId = String.fromCharCode(bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]);
+            if (frameId === '\0\0\0\0') break;
+            const frameSize = version >= 4
+                ? ((bytes[offset+4] & 0x7f) << 21) | ((bytes[offset+5] & 0x7f) << 14) |
+                  ((bytes[offset+6] & 0x7f) << 7)  |  (bytes[offset+7] & 0x7f)
+                : (bytes[offset+4] << 24) | (bytes[offset+5] << 16) |
+                  (bytes[offset+6] << 8)  |  bytes[offset+7];
+            if (frameId === 'APIC') {
+                let i = offset + 10;
+                i++; // skip encoding byte
+                while (bytes[i] !== 0) i++; // skip mime type string
+                i++; // skip null terminator
+                i++; // skip picture type byte
+                while (bytes[i] !== 0) i++; // skip description
+                i++; // skip null terminator
+                const imgData = bytes.slice(i, offset + 10 + frameSize);
+                // Detect mime from data
+                const mime = imgData[0] === 0x89 ? 'image/png' : 'image/jpeg';
+                const ext = mime === 'image/png' ? 'png' : 'jpg';
+                const blob = new Blob([imgData], { type: mime });
+                return new File([blob], `cover.${ext}`, { type: mime });
+            }
+            offset += 10 + frameSize;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 type ModalMode = 'upload_track' | 'edit_track' | 'edit_pub';
 
@@ -10,29 +54,44 @@ interface TrackEditModalProps {
     editId?: number;           // For edit modes
     initialTitle?: string;
     initialCoverUrl?: string | null;
+    initialPrice?: string;
+    initialForSale?: boolean;
     onSuccess: () => void;
 }
 
 const TrackEditModal: React.FC<TrackEditModalProps> = ({
-    isOpen, onClose, mode, initialFile, editId, initialTitle = '', initialCoverUrl = null, onSuccess
+    isOpen, onClose, mode, initialFile, editId, initialTitle = '', initialCoverUrl = null, initialPrice = '0', initialForSale = false, onSuccess
 }) => {
     const [title, setTitle] = useState(initialTitle);
+    const [price, setPrice] = useState(initialPrice);
+    const [forSale, setForSale] = useState(initialForSale);
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(initialCoverUrl);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    const API_BASE_URL = getApiBaseUrl();
 
     useEffect(() => {
         if (isOpen) {
             setTitle(initialTitle || (initialFile ? initialFile.name.replace(/\.[^/.]+$/, '') : ''));
+            setPrice(initialPrice || '0');
+            setForSale(initialForSale || false);
             setCoverFile(null);
             setPreviewUrl(initialCoverUrl);
             setError('');
+
+            if (initialFile && !initialCoverUrl) {
+                extractCoverFromFile(initialFile).then((extracted) => {
+                    if (extracted) {
+                        setCoverFile(extracted);
+                        setPreviewUrl(URL.createObjectURL(extracted));
+                    }
+                });
+            }
         }
-    }, [isOpen, initialTitle, initialFile, initialCoverUrl]);
+    }, [isOpen, initialTitle, initialFile, initialCoverUrl, initialPrice, initialForSale]);
 
     if (!isOpen) return null;
 
@@ -59,6 +118,9 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
         try {
             const formData = new FormData();
             formData.append('title', title.trim());
+            const priceVal = parseFloat(price) || 0;
+            formData.append('price', priceVal.toFixed(2));
+            formData.append('for_sale', forSale ? 'true' : 'false');
             if (coverFile) {
                 formData.append('cover_image', coverFile);
             }
@@ -103,7 +165,7 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
 
     return (
         <div style={styles.overlay}>
-            <div style={styles.modal}>
+            <div className="modal-responsive" style={styles.modal}>
                 <h2 style={styles.header}>{titleText}</h2>
 
                 {error && <div style={styles.error}>{error}</div>}
@@ -141,6 +203,50 @@ const TrackEditModal: React.FC<TrackEditModalProps> = ({
                             style={styles.input}
                             placeholder="Track Title"
                         />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                            <label style={{ ...styles.label, marginTop: 0 }}>List on Marketplace</label>
+                            <button
+                                type="button"
+                                onClick={() => setForSale(v => !v)}
+                                style={{
+                                    width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+                                    background: forSale ? 'linear-gradient(135deg, #a78bfa, #ec4899)' : 'rgba(255,255,255,0.15)',
+                                    position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                                }}
+                            >
+                                <span style={{
+                                    position: 'absolute', top: 3, left: forSale ? 21 : 3,
+                                    width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                                    transition: 'left 0.2s',
+                                }} />
+                            </button>
+                        </div>
+                        {forSale && (
+                            <>
+                                <label style={{ ...styles.label, marginTop: 10 }}>Price (USD) — set 0 for free</label>
+                                <div style={{ position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>$</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={price}
+                                        onChange={e => {
+                                            const v = e.target.value;
+                                            if (/^\d*\.?\d{0,2}$/.test(v)) setPrice(v);
+                                        }}
+                                        onKeyDown={e => {
+                                            const allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
+                                            if (allowed.includes(e.key)) return;
+                                            if (/^\d$/.test(e.key)) return;
+                                            if (e.key === '.' && !price.includes('.')) return;
+                                            e.preventDefault();
+                                        }}
+                                        style={{ ...styles.input, paddingLeft: 24 }}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 

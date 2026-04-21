@@ -5,6 +5,8 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { useNotificationStore } from './stores/notificationStore';
 import { usePlayerStore } from './stores/playerStore';
 import { getUserGradient } from './utils/userGradient';
+import { PlayGlyph, PauseGlyph } from './components/MediaIcons';
+import { getApiBaseUrl } from './utils/apiBase';
 
 interface SearchUser {
   id: number;
@@ -53,7 +55,7 @@ const SearchPage = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -146,7 +148,7 @@ const SearchPage = () => {
       `}</style>
 
       {/* Sidebar */}
-      <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+      <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
         <div style={styles.sidebarTop}>
           <Link to="/home">
             <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -162,9 +164,9 @@ const SearchPage = () => {
           <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MusicIcon /></span> Create Music
           </Link>
-          <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
+          <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
             <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
-          </div>
+          </Link>
           <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
             <span style={styles.sidebarIcon}><BellIcon /></span> Notifications
             {unreadCount > 0 && (
@@ -185,12 +187,13 @@ const SearchPage = () => {
           <Link to="/upload" style={styles.uploadBtn}>
             Upload Track
           </Link>
+          <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
         </div>
       </nav>
 
       {/* Main Area */}
-      <div style={styles.mainArea}>
-        <div style={styles.searchBarSection}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="search-bar-section" style={styles.searchBarSection}>
           <div style={styles.searchBarWrap}>
             <input
               type="text"
@@ -205,7 +208,7 @@ const SearchPage = () => {
           </div>
         </div>
 
-        <div style={styles.main}>
+        <div className="search-results" style={styles.main}>
           {!hasSearched && !loading && (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>Search for users, tracks, or posts</p>
@@ -264,7 +267,7 @@ const SearchPage = () => {
                         onClick={() => togglePlay(t.audio_file, key)}
                         style={styles.playBtn}
                       >
-                        {playingId === key ? '⏸' : '▶'}
+                        {playingId === key ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                       </button>
                       <div style={styles.resultInfo}>
                         <span style={styles.resultTitle}>{t.title}</span>
@@ -301,7 +304,7 @@ const SearchPage = () => {
                         onClick={() => togglePlay(p.audio_file, key)}
                         style={styles.playBtn}
                       >
-                        {playingId === key ? '⏸' : '▶'}
+                        {playingId === key ? <PauseGlyph size={16} fill="#fff" /> : <PlayGlyph size={16} fill="#fff" />}
                       </button>
                       <div style={styles.resultInfo}>
                         <span style={styles.resultTitle}>{p.title}</span>
@@ -399,6 +402,14 @@ const styles: Record<string, React.CSSProperties> = {
   sidebarBottom: {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
   },
   uploadBtn: {
     display: 'block',

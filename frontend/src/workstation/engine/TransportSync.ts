@@ -1,6 +1,6 @@
 import audioEngine from './AudioEngine';
 import useDawStore from '../state/dawStore';
-import { Track } from '../models/types';
+import { Track } from '../models/Types';
 
 let animationFrameId: number | null = null;
 let unsubscribeTracks: (() => void) | null = null;

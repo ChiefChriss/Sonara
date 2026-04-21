@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import useDawStore from '../state/dawStore';
-import { Clip } from '../models/types';
+import { Clip } from '../models/Types';
 import { seek as seekTo } from '../engine/TransportSync';
 import { decodeAudioFile } from '../utils/AudioUtils';
 import { parseMidiFile, midiToClipNotes } from '../engine/MidiParser';
@@ -520,6 +520,7 @@ const Timeline: React.FC<TimelineProps> = ({ mode, trackId, showAutomation }) =>
         trackHeight={trackHeight}
         snapEnabled={snapEnabled}
         pianoRollClipId={pianoRollClipId}
+        enableKeyboardDelete={trackId === tracks[0]?.id}
       />
     </div>
   );
@@ -533,7 +534,8 @@ const TimelineDragHandler: React.FC<{
   trackHeight: number;
   snapEnabled: boolean;
   pianoRollClipId: number | null;
-}> = ({ dragState, setDragState, pixelsPerBeat, trackHeight, snapEnabled, pianoRollClipId }) => {
+  enableKeyboardDelete: boolean;
+}> = ({ dragState, setDragState, pixelsPerBeat, trackHeight, snapEnabled, pianoRollClipId, enableKeyboardDelete }) => {
   const tracks = useDawStore((s) => s.tracks);
   const moveClip = useDawStore((s) => s.moveClip);
   const resizeClip = useDawStore((s) => s.resizeClip);
@@ -615,6 +617,7 @@ const TimelineDragHandler: React.FC<{
 
   // Keyboard delete
   useEffect(() => {
+    if (!enableKeyboardDelete) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (pianoRollClipId !== null) return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClipId !== null) {
@@ -626,7 +629,7 @@ const TimelineDragHandler: React.FC<{
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedClipId, deleteClip, pianoRollClipId]);
+  }, [enableKeyboardDelete, selectedClipId, deleteClip, pianoRollClipId]);
 
   return null; // Render nothing, just manages effects
 };

@@ -5,6 +5,7 @@ import { HomeIcon, TrendingIcon, MusicIcon, MarketplaceIcon, BellIcon, ProfileIc
 import { usePlayerStore } from './stores/playerStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { apiFetch } from './utils/api';
+import { getApiBaseUrl } from './utils/apiBase';
 import { getTrackGradient } from './utils/trackGradient';
 
 interface Track {
@@ -45,7 +46,7 @@ const ExplorePage = () => {
   const { currentTrack, isPlaying, play, togglePlayPause } = usePlayerStore();
   const { unreadCount, startPolling } = useNotificationStore();
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const API_BASE_URL = getApiBaseUrl();
 
   useEffect(() => {
     document.title = 'Explore | Sonara';
@@ -86,12 +87,21 @@ const ExplorePage = () => {
     if (currentTrack?.id === track.id && currentTrack?.type === 'track') {
       togglePlayPause();
     } else {
+      const queue = tracks.map((item) => ({
+        id: item.id,
+        type: 'track' as const,
+        title: item.title,
+        artist: item.display_name || item.username,
+        audioUrl: item.audio_file,
+        coverImage: item.cover_image || item.profile_picture || null,
+        artistHandle: item.username,
+      }));
       play({
         id: track.id, type: 'track',
         title: track.title, artist: track.display_name || track.username,
-        audioUrl: track.audio_file, coverImage: null,
+        audioUrl: track.audio_file, coverImage: track.cover_image || track.profile_picture || null,
         artistHandle: track.username,
-      });
+      }, { queue });
       setTracks((prev) => prev.map((t) => t.id === track.id ? { ...t, play_count: t.play_count + 1 } : t));
     }
   };
@@ -100,12 +110,21 @@ const ExplorePage = () => {
     if (currentTrack?.id === pub.id && currentTrack?.type === 'publication') {
       togglePlayPause();
     } else {
+      const queue = publications.map((item) => ({
+        id: item.id,
+        type: 'publication' as const,
+        title: item.title,
+        artist: item.display_name || item.username,
+        audioUrl: item.audio_file,
+        coverImage: item.cover_image || item.profile_picture || null,
+        artistHandle: item.username,
+      }));
       play({
         id: pub.id, type: 'publication',
         title: pub.title, artist: pub.display_name || pub.username,
         audioUrl: pub.audio_file, coverImage: pub.cover_image,
         artistHandle: pub.username,
-      });
+      }, { queue });
       setPublications((prev) => prev.map((p) => p.id === pub.id ? { ...p, play_count: p.play_count + 1 } : p));
     }
   };
@@ -151,7 +170,7 @@ const ExplorePage = () => {
 
   /* ── Sidebar (shared layout) ─────────────────────────────────────────────── */
   const renderSidebar = () => (
-    <nav style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
+    <nav className="desktop-sidebar" style={{...styles.sidebar, bottom: currentTrack ? 72 : 0}}>
       <div style={styles.sidebarTop}>
         <Link to="/home">
           <img src={sonaraLogo} alt="Sonara" style={styles.sidebarLogo} />
@@ -167,9 +186,9 @@ const ExplorePage = () => {
         <Link to="/create" className="sidebar-link" style={styles.sidebarLink}>
           <span style={styles.sidebarIcon as React.CSSProperties}><MusicIcon /></span> Create Music
         </Link>
-        <div style={{ ...styles.sidebarLink, opacity: 0.35, cursor: 'default' }}>
-          <span style={styles.sidebarIcon as React.CSSProperties}><MarketplaceIcon /></span> Marketplace
-        </div>
+        <Link to="/marketplace" className="sidebar-link" style={styles.sidebarLink}>
+            <span style={styles.sidebarIcon}><MarketplaceIcon /></span> Marketplace
+        </Link>
         <Link to="/notifications" className="sidebar-link" style={{ ...styles.sidebarLink, position: 'relative' }}>
           <span style={styles.sidebarIcon as React.CSSProperties}><BellIcon /></span> Notifications
           {unreadCount > 0 && (
@@ -183,7 +202,8 @@ const ExplorePage = () => {
         </Link>
       </div>
       <div style={styles.sidebarBottom}>
-        <Link to="/create" style={styles.uploadBtn}>Upload Track</Link>
+        <Link to={username ? `/@${username}?tab=Tracks` : '/profile?tab=Tracks'} style={styles.uploadBtn}>Upload Track</Link>
+        <Link to="/terms-of-service" style={styles.tosLink}>Terms of Service</Link>
       </div>
     </nav>
   );
@@ -204,8 +224,8 @@ const ExplorePage = () => {
 
       {renderSidebar()}
 
-      <div style={styles.mainArea}>
-        <div style={styles.main}>
+      <div className="sidebar-main" style={styles.mainArea}>
+        <div className="explore-main" style={styles.main}>
           {loading ? (
             <div style={styles.loadingWrap}>
               <div style={styles.spinner} />
@@ -219,7 +239,7 @@ const ExplorePage = () => {
           ) : (
             <>
               <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Uploaded Tracks</h2>
-              <div style={styles.grid}>
+              <div className="track-grid-responsive explore-grid" style={styles.grid}>
                 {tracks.map((track) => (
                   <div key={track.id} className="explore-card" style={styles.card}>
                     <div className="card-img-wrap" style={styles.cardImageWrap} onClick={() => navigate(`/track/${track.id}`)}>
@@ -273,7 +293,7 @@ const ExplorePage = () => {
               {publications.length > 0 && (
                 <>
                   <h2 style={{ fontSize: '18px', fontWeight: 700, marginTop: '48px', marginBottom: '16px' }}>Published Tracks</h2>
-                  <div style={styles.grid}>
+                  <div className="track-grid-responsive explore-grid" style={styles.grid}>
                     {publications.map((pub) => (
                       <div key={pub.id} className="explore-card" style={styles.card}>
                         <div className="card-img-wrap" style={styles.cardImageWrap} onClick={() => navigate(`/publication/${pub.id}`)}>
@@ -393,6 +413,14 @@ const styles: Record<string, React.CSSProperties> = {
   sidebarBottom: {
     padding: '16px 12px 24px',
     borderTop: '1px solid rgba(167,139,250,0.1)',
+  },
+  tosLink: {
+    display: 'block',
+    textAlign: 'center' as const,
+    marginTop: '10px',
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.3)',
+    textDecoration: 'none',
   },
   uploadBtn: {
     display: 'block',

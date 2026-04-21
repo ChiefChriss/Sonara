@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
-import { Track, InstrumentPreset } from '../models/types';
-import { getPreset } from '../models/presets';
+import { Track, InstrumentPreset } from '../models/Types';
+import { getPreset } from '../models/Presets';
 import useDawStore from '../state/dawStore';
 
 // Convert MIDI note number to note name

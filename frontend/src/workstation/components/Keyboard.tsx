@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import useDawStore from '../state/dawStore';
 import { previewNoteOn, previewNoteOff, previewNoteOffSingle, rebuildTrackSynth, setPreviewRelease, rebuildPreviewSynth } from '../engine/TransportSync';
-import { getPresetsByCategory, getPreset } from '../models/presets';
+import { getPresetsByCategory, getPreset } from '../models/Presets';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -360,6 +360,8 @@ const Keyboard: React.FC<KeyboardProps> = ({ clipId, trackId }) => {
               onMouseDown={() => handleNoteOn(wk.pitch)}
               onMouseUp={() => handleNoteOff(wk.pitch)}
               onMouseLeave={() => { if (activeKeys.has(wk.pitch)) handleNoteOff(wk.pitch); }}
+              onTouchStart={(e) => { e.preventDefault(); handleNoteOn(wk.pitch); }}
+              onTouchEnd={(e) => { e.preventDefault(); handleNoteOff(wk.pitch); }}
               style={{
                 ...styles.whiteKey,
                 width: `${whiteKeyWidth}%`,
@@ -400,6 +402,8 @@ const Keyboard: React.FC<KeyboardProps> = ({ clipId, trackId }) => {
               onMouseDown={(e) => { e.stopPropagation(); handleNoteOn(bk.pitch); }}
               onMouseUp={() => handleNoteOff(bk.pitch)}
               onMouseLeave={() => { if (activeKeys.has(bk.pitch)) handleNoteOff(bk.pitch); }}
+              onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); handleNoteOn(bk.pitch); }}
+              onTouchEnd={(e) => { e.preventDefault(); handleNoteOff(bk.pitch); }}
               style={{
                 ...styles.blackKey,
                 left: `${leftPct}%`,
