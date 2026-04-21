@@ -455,6 +455,7 @@ const Marketplace = () => {
             <div className="track-grid-responsive marketplace-grid" style={styles.trackGrid}>
               {filteredItems.map(item => {
                 const owned = alreadyOwned.has(ownedKey(item));
+                const isOwner = username && item.username === username;
                 const isFree = getPrice(item) === 0;
                 const isPub = item.item_type === 'publication';
                 const likeKey = `${item.item_type}-${item.id}`;
@@ -471,15 +472,17 @@ const Marketplace = () => {
                           <div style={{ ...styles.cardGradient, background: getTrackGradient(item.id) }} />
                         )}
                         {/* Price badge */}
-                        <div style={{ ...styles.priceBadge, background: isFree ? 'rgba(52,211,153,0.9)' : 'rgba(167,139,250,0.9)' }}>
-                          {getPriceLabel(item)}
-                        </div>
+                        {!owned && !isOwner && (
+                          <div style={{ ...styles.priceBadge, background: isFree ? 'rgba(52,211,153,0.9)' : 'rgba(167,139,250,0.9)' }}>
+                            {getPriceLabel(item)}
+                          </div>
+                        )}
                         {/* Type badge */}
                         <div style={{ ...styles.typeBadge, background: isPub ? 'rgba(236,72,153,0.85)' : 'rgba(99,102,241,0.85)' }}>
                           {isPub ? 'PUB' : 'TRACK'}
                         </div>
                         {/* Owned badge */}
-                        {owned && <div style={styles.ownedBadge}>Owned</div>}
+                        {(owned || isOwner) && <div style={styles.ownedBadge}>{isOwner ? 'Your Track' : 'Owned'}</div>}
                         {/* Play button */}
                         <button
                           type="button"
@@ -526,12 +529,12 @@ const Marketplace = () => {
                       type="button"
                       style={{
                         ...styles.buyBtn,
-                        ...(owned ? styles.ownedBtn : isFree ? styles.freeBtn : styles.paidBtn),
+                        ...((owned || isOwner) ? styles.ownedBtn : isFree ? styles.freeBtn : styles.paidBtn),
                       }}
-                      onClick={() => { if (!owned) openBuy(item); }}
-                      disabled={owned}
+                      onClick={() => { if (!owned && !isOwner) openBuy(item); }}
+                      disabled={owned || !!isOwner}
                     >
-                      {owned ? 'In Your Library' : isFree ? 'Get Free' : `Buy ${getPriceLabel(item)}`}
+                      {isOwner ? 'Your Track' : owned ? 'In Your Library' : isFree ? 'Get Free' : `Buy ${getPriceLabel(item)}`}
                     </button>
                   </div>
                 );

@@ -21,7 +21,7 @@ import dj_database_url
 ENV = os.environ.get('ENV', 'dev')
 
 if ENV == 'dev':
-    FRONTEND_URL = 'https://thv8qt7s-5173.usw3.devtunnels.ms/' #'http://localhost:5173'
+    FRONTEND_URL = 'http://localhost:5173'
 else:
     FRONTEND_URL = 'https://www.sonara.us'
 

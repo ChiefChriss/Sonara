@@ -24,6 +24,7 @@ interface LibraryItem {
   title: string;
   artist: string;
   audioUrl: string;
+  isOwn?: boolean;
 }
 
 const DAW = () => {
@@ -100,23 +101,63 @@ const DAW = () => {
     try {
       const API_BASE = getApiBaseUrl();
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_BASE}/api/auth/purchases/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const items: LibraryItem[] = data.map((p: any) => {
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const toUrl = (raw: string) => raw.startsWith('http') ? raw : raw ? `${API_BASE}${raw}` : '';
+
+      // Fetch purchases and own tracks/publications in parallel
+      const [purchasesRes, tracksRes, pubsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/auth/purchases/`, { headers }),
+        fetch(`${API_BASE}/api/auth/tracks/`, { headers }),
+        fetch(`${API_BASE}/api/auth/publications/`, { headers }),
+      ]);
+
+      const rawItems: LibraryItem[] = [];
+
+      if (purchasesRes.ok) {
+        const data = await purchasesRes.json();
+        data.forEach((p: any) => {
           const item = p.item_type === 'track' ? p.track : p.publication;
-          return {
-            itemId: item?.id,
-            itemType: p.item_type,
+          const audioUrl = toUrl(item?.audio_file || '');
+          if (audioUrl) rawItems.push({
+            itemId: item?.id, itemType: p.item_type,
             title: item?.title || 'Unknown',
             artist: item?.display_name || item?.username || '',
-            audioUrl: item?.audio_file || '',
-          };
-        }).filter((i: LibraryItem) => i.audioUrl);
-        setLibraryItems(items);
+            audioUrl,
+          });
+        });
       }
+
+      if (tracksRes.ok) {
+        const data = await tracksRes.json();
+        data.forEach((t: any) => {
+          const audioUrl = toUrl(t.audio_file || '');
+          if (audioUrl && !rawItems.find(i => i.itemType === 'track' && i.itemId === t.id)) {
+            rawItems.push({ itemId: t.id, itemType: 'track', title: t.title || 'Unknown', artist: 'You', audioUrl, isOwn: true });
+          }
+        });
+      }
+
+      if (pubsRes.ok) {
+        const data = await pubsRes.json();
+        data.forEach((p: any) => {
+          const audioUrl = toUrl(p.audio_file || '');
+          if (audioUrl && !rawItems.find(i => i.itemType === 'publication' && i.itemId === p.id)) {
+            rawItems.push({ itemId: p.id, itemType: 'publication', title: p.title || 'Unknown', artist: 'You', audioUrl, isOwn: true });
+          }
+        });
+      }
+
+      // Filter out files that no longer exist on the server
+      const reachable = await Promise.all(
+        rawItems.map(async (i) => {
+          try {
+            const check = await fetch(i.audioUrl, { method: 'HEAD' });
+            return check.ok ? i : null;
+          } catch { return null; }
+        })
+      );
+      setLibraryItems(reachable.filter(Boolean) as LibraryItem[]);
     } catch { /* silent */ }
     setLibraryLoading(false);
   };
@@ -126,7 +167,8 @@ const DAW = () => {
     setImportingId(key);
     try {
       // Fetch the audio file as a blob
-      const res = await fetch(item.audioUrl);
+      const audioUrl = item.audioUrl.startsWith('http') ? item.audioUrl : `${getApiBaseUrl()}${item.audioUrl}`;
+      const res = await fetch(audioUrl);
       const blob = await res.blob();
       const file = new File([blob], `${item.title}.mp3`, { type: 'audio/mpeg' });
 
@@ -136,8 +178,8 @@ const DAW = () => {
       const newTrack = state.tracks[state.tracks.length - 1];
       if (!newTrack || newTrack.type !== 'audio') return;
       const data = await decodeAudioFile(file, bpm);
-      // Use track title as clip name
-      state.addAudioClip(newTrack.id, 0, item.title, data.durationBeats, data.url, data.peaks);
+      // Use the server URL (not the blob URL) so it survives project save/reload
+      state.addAudioClip(newTrack.id, 0, item.title, data.durationBeats, audioUrl, data.peaks);
     } catch (err) {
       console.error('Library import failed:', err);
     }
@@ -544,7 +586,7 @@ const DAW = () => {
             {libraryLoading ? (
               <p style={libStyles.empty}>Loading your library...</p>
             ) : libraryItems.length === 0 ? (
-              <p style={libStyles.empty}>Your library is empty. Purchase tracks from the Marketplace first.</p>
+              <p style={libStyles.empty}>Your library is empty. Upload tracks or purchase from the Marketplace first.</p>
             ) : (
               <div style={libStyles.list}>
                 {libraryItems.map(item => {
@@ -555,7 +597,7 @@ const DAW = () => {
                       <div style={libStyles.icon}>{item.itemType === 'publication' ? '🎼' : '🎵'}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={libStyles.itemTitle}>{item.title}</p>
-                        <p style={libStyles.itemArtist}>{item.artist}</p>
+                        <p style={libStyles.itemArtist}>{item.isOwn ? 'Your track' : item.artist}</p>
                       </div>
                       <button
                         style={{ ...libStyles.importBtn, ...(busy ? libStyles.importBtnBusy : {}) }}
