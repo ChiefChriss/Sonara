@@ -911,7 +911,7 @@ const useDawStore = create<DawStore>((set, get) => ({
             startBeat: c.startBeat,
             duration: c.duration,
             notes: c.notes,
-            audioFileUrl: c.audioFileUrl || null,
+            audioFileUrl: (c.audioFileUrl && !c.audioFileUrl.startsWith('blob:')) ? c.audioFileUrl : null,
             waveformPeaks: c.waveformPeaks || null,
             audioOffset: c.audioOffset ?? 0,
             audioDurationBeats: c.audioDurationBeats ?? null,
@@ -921,12 +921,19 @@ const useDawStore = create<DawStore>((set, get) => ({
   },
   loadProjectData: (data: any) => {
     if (!data) return;
+    const tracks = (data.tracks || []).map((t: any) => ({
+      ...t,
+      clips: (t.clips || []).map((c: any) => ({
+        ...c,
+        audioFileUrl: (c.audioFileUrl && !c.audioFileUrl.startsWith('blob:')) ? c.audioFileUrl : null,
+      })),
+    }));
     set({
       projectName: data.projectName || 'Untitled Project',
       bpm: data.bpm || 120,
       timeSignature: data.timeSignature || { numerator: 4, denominator: 4 },
       musicalKey: data.musicalKey || 'C',
-      tracks: data.tracks || [],
+      tracks,
       // Reset editing state
       selectedClipId: null,
       pianoRollClipId: null,

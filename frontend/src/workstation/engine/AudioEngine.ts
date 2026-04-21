@@ -506,14 +506,15 @@ class AudioEngine {
   async play(tracks: Track[], bpm: number, fromTime: number = 0): Promise<void> {
     this.schedulePlayback(tracks, bpm, fromTime);
 
-    // Wait for all audio players to be loaded
+    // Wait for all audio players to be loaded (max 5s per player to avoid hanging on errors)
     const loadPromises: Promise<void>[] = [];
     this.trackNodes.forEach((nodes) => {
       nodes.players.forEach((player) => {
         if (!player.loaded) {
           loadPromises.push(new Promise<void>((resolve) => {
+            const deadline = Date.now() + 5000;
             const check = () => {
-              if (player.loaded) resolve();
+              if (player.loaded || Date.now() >= deadline) resolve();
               else setTimeout(check, 10);
             };
             check();

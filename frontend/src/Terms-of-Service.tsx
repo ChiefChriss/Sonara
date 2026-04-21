@@ -1,9 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fullBleedSafeArea } from './utils/safeArea';
 
 const TermsOfService: React.FC = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.body.style.overflow = 'auto';
+    document.documentElement.style.overflow = 'auto';
+    return () => {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
 
   return (
     <div style={{ backgroundColor: '#0f0f1a', minHeight: '100dvh', height: 'auto', overflow: 'auto', fontFamily: "'Poppins', sans-serif", ...fullBleedSafeArea }} className="tos-page">
